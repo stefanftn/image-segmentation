@@ -141,14 +141,14 @@ services:
     environment:
       <<: *web-env
     ports:
-      - "127.0.0.1:4004:8080"
+      - "4004:8080"
     networks: [imageseg]
 
   frontend:
     image: imageseg-frontend:latest
     restart: unless-stopped
     ports:
-      - "127.0.0.1:4001:80"
+      - "4001:80"
     networks: [imageseg]
 
 networks:
