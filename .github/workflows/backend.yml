@@ -6,6 +6,7 @@ name: Backend — build & deploy
 # ketering) the same way the rest of that isolation already works. Do not change `runs-on` to
 # `ubuntu-latest` or drop the `moleraj` label without re-reading that isolation note.
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
