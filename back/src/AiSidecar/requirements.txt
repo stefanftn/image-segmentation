@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+python-multipart
+python-dotenv
+torch
+torchvision
+transformers
+pillow
+numpy
+scipy
+prometheus-client

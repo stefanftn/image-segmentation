@@ -1,0 +1,221 @@
+# =============================================================================
+# Four-service target (spec §11): web, postgres, ai-sidecar, minio(+minio-init).
+# No Kafka, no Redis, no gateway/YARP, no FTP, no Prometheus/Grafana.
+#
+# EVERY credential and per-environment value lives in deploy/.env, not in this file - copy
+# deploy/.env.example to deploy/.env and fill it in before the first run:
+#
+#   cp deploy/.env.example deploy/.env
+#   # edit deploy/.env
+#   docker compose -f deploy/docker-compose.yml run --rm migrate
+#   docker compose -f deploy/docker-compose.yml up --build
+#
+# deploy/.env is where it has to be, not the repo root: Compose resolves its default .env
+# file relative to the *first Compose file's directory* (deploy/), not the current working
+# directory you happen to run `docker compose -f deploy/docker-compose.yml` from - see
+# deploy/.env.example's own header for the two ways to override that if you'd rather keep it
+# elsewhere. deploy/.env is gitignored; deploy/.env.example is the committed template.
+#
+# The "migrate" service is a one-shot job (spec §12): migrations are applied as an explicit
+# deploy step, not automatically on "web" startup, so that scaling "web" to several replicas
+# never races N instances against each other trying to migrate the same database. Run it once
+# before the first `up`, and again after pulling any change that added a migration.
+#
+# Scale the web tier (REST + SignalR hub + TaskPoller + StaleTaskSweeperWorker + Identity, all
+# in one process per spec §1/§11):
+#
+#   docker compose -f deploy/docker-compose.yml up --scale web=3
+#
+# Every "web" replica runs its own TaskPoller and its own StaleTaskSweeperWorker. This is safe
+# by construction: TaskPoller's claim is `SELECT ... FOR UPDATE SKIP LOCKED` (spec §4.1), so
+# replicas never claim the same row, and StaleTaskSweeperWorker's write is guarded on the
+# non-terminal state (spec §4.5), so whichever replica gets there first wins and the others
+# affect zero rows. No leader election, no dedicated worker process, on purpose (spec §1's "one
+# deployable ASP.NET Core monolith").
+# =============================================================================
+
+name: imageseg
+
+# Single source of truth for allowed browser origins, referenced by both `web` (its own CORS
+# middleware, spec §9) and `minio` (see below for why "null" is appended only for minio, never
+# for web) so the two configurations cannot drift apart. Sourced from .env's
+# CORS_ALLOWED_ORIGINS; ${...:-default} keeps `docker compose up` working even without a .env
+# file, matching localhost:5173/3000 dev defaults.
+x-cors-origins: &cors-origins "${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:3000}"
+
+x-web-env: &web-env
+  DOTNET_ENVIRONMENT: Production
+  ASPNETCORE_ENVIRONMENT: Production
+  # Built from the same POSTGRES_* values the "postgres" service itself is configured with
+  # (below), so the two can never drift into referencing different credentials.
+  ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-imageseg};Username=${POSTGRES_USER:-imageseg};Password=${POSTGRES_PASSWORD:-imageseg}"
+  # Same story as ConnectionStrings__Postgres above: built from the same MINIO_ROOT_* values
+  # the "minio" service itself uses (below). Previously this was entirely absent from web's
+  # environment, silently relying on appsettings.json's own hardcoded "minioadmin" default
+  # matching MinIO's own hardcoded default - true by coincidence, not by wiring. Now that both
+  # sides come from .env, changing MINIO_ROOT_PASSWORD there updates both automatically.
+  Storage__MinIO__AccessKey: "${MINIO_ROOT_USER:-minioadmin}"
+  Storage__MinIO__SecretKey: "${MINIO_ROOT_PASSWORD:-minioadmin}"
+  # Must be https:// wherever the frontend is served over https - GET /result and /original
+  # 302-redirect the browser to this origin (spec §6), and a redirect from an https page to an
+  # http URL is blocked as mixed content. The http default here is for local dev only.
+  Storage__MinIO__PublicEndpoint: "${MINIO_PUBLIC_ENDPOINT:-http://localhost:9000}"
+  Cors__AllowedOrigins: *cors-origins
+  AiSidecar__BaseUrl: "http://ai-sidecar:8000"
+  # Which backend serves POST /regions - "Local" (CPU SAM in ai-sidecar, default) or "Colab"
+  # (GPU-backed notebook over an ngrok tunnel). Segment always stays local regardless of this
+  # setting; see AiSidecarOptions.RegionsBackend.
+  AiSidecar__RegionsBackend: "${AI_SIDECAR_REGIONS_BACKEND:-Local}"
+  # Only read when RegionsBackend=Colab. The ngrok URL changes every time the Colab notebook
+  # restarts - update AI_SIDECAR_COLAB_BASE_URL in deploy/.env and `docker compose up -d web`
+  # each time, rather than editing this file.
+  AiSidecar__Colab__BaseUrl: "${AI_SIDECAR_COLAB_BASE_URL:-}"
+  # Set these in deploy/.env before enabling Google sign-in (spec §3) - left empty by ${...:-}
+  # so `docker compose up` still starts cleanly for anyone who has not configured OAuth yet
+  # (AuthController.ExternalLoginGoogle returns a clean 404 rather than crashing when unset).
+  Authentication__Google__ClientId: "${GOOGLE_CLIENT_ID:-}"
+  Authentication__Google__ClientSecret: "${GOOGLE_CLIENT_SECRET:-}"
+  # Signs every access token this backend issues (spec §3's JWT-bearer choice - see the note
+  # atop Program.cs's Identity block for why). No ${...:-default} fallback, deliberately,
+  # unlike everything else in this block: an empty signing key is a real security hole, not an
+  # optional feature left off, so this is required to come from deploy/.env with no built-in
+  # value to fall back on - JwtTokenService refuses to start rather than silently accepting an
+  # empty or short one. Generate one with `openssl rand -base64 48`. Rotating this invalidates
+  # every outstanding token instantly - there is no transition period, so treat it like any
+  # other credential rotation.
+  Authentication__Jwt__SigningKey: "${JWT_SIGNING_KEY}"
+
+services:
+  # ---------------------------------------------------------------- database
+  postgres:
+    image: postgres:16-alpine
+    container_name: imageseg-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-imageseg}
+      POSTGRES_USER: ${POSTGRES_USER:-imageseg}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-imageseg}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-imageseg} -d ${POSTGRES_DB:-imageseg}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [imageseg]
+
+  # ----------------------------------------------------------------- storage
+  minio:
+    image: minio/minio:RELEASE.2024-09-22T00-33-43Z
+    container_name: imageseg-minio
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      # Server-wide CORS (spec §9's frontend origin list). Per-bucket CORS via `mc cors set`
+      # is a MinIO AIStor (paid) feature only and always fails on the open-source Community
+      # Edition server this compose file runs - see deploy/minio-init/init.sh for the full
+      # explanation. This env var is the actual, working mechanism for open-source MinIO.
+      # NOT *cors-origins alone, deliberately: a browser fetch() that crosses an origin
+      # boundary via a redirect (backend's /result and /original 302 to a presigned MinIO
+      # URL - spec §8) gets its Origin header rewritten to the literal string "null" by the
+      # browser itself for that follow-up request (a "tainted origin," per the Fetch spec -
+      # this is standard, spec'd behavior, not a MinIO or backend bug). "null" has to be
+      # allowed here on top of the real origins for that redirected leg to pass CORS - it
+      # would never be needed on the backend's own Cors__AllowedOrigins above, since a direct
+      # fetch() to the API always carries the page's real origin, never "null".
+      MINIO_API_CORS_ALLOW_ORIGIN: "${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:3000},null"
+    ports:
+      # Published because the browser fetches presigned URLs from MinIO directly (spec §6) -
+      # those requests never pass through the Web process.
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [imageseg]
+
+  minio-init:
+    image: minio/mc:RELEASE.2024-09-16T17-43-14Z
+    container_name: imageseg-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "/scripts/init.sh"]
+    environment:
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET: images
+    volumes:
+      - ./minio-init:/scripts:ro
+    networks: [imageseg]
+
+  # ------------------------------------------------------------- ai sidecar
+  # Unchanged from the prototype (spec §7) - eager model loading, /health/ready-gated
+  # healthcheck, cached model volume, no container_name so it stays scalable.
+  ai-sidecar:
+    build:
+      context: ../src/AiSidecar
+      dockerfile: Dockerfile
+    volumes:
+      - ai-sidecar-model-cache:/models-cache
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:8000/health/ready')\""]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 600s
+    restart: unless-stopped
+    networks: [imageseg]
+
+  # ------------------------------------------------------- one-shot migration job (spec §12)
+  migrate:
+    build:
+      context: ..
+      dockerfile: src/ImageSeg.Web/Dockerfile
+    environment:
+      <<: *web-env
+    entrypoint: ["dotnet", "ImageSeg.Web.dll", "--migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [imageseg]
+    # No `restart:` and no `up` by default - run explicitly with
+    # `docker compose -f deploy/docker-compose.yml run --rm migrate`.
+
+  # --------------------------------------------------------------- web (spec §1, §11)
+  # REST + SignalR hub + TaskPoller + StaleTaskSweeperWorker + Identity, all in this one
+  # deployable. Safe to run as N replicas: docker compose up --scale web=3 (see header note).
+  web:
+    build:
+      context: ..
+      dockerfile: src/ImageSeg.Web/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ai-sidecar:
+        # service_healthy, not service_started: with main.py's eager model loading, waiting
+        # for healthy means TaskPoller never dispatches to a sidecar replica before it is
+        # actually warm.
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      <<: *web-env
+    ports:
+      - "8080:8080"   # the only application entrypoint
+    networks: [imageseg]
+
+networks:
+  imageseg:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  minio-data:
+  ai-sidecar-model-cache:

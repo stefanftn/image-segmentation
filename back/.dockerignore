@@ -1,0 +1,19 @@
+# Build context for src/ImageSeg.Web/Dockerfile is the repo root (deploy/docker-compose.yml
+# uses `context: ..`). Without this file, `COPY src/ src/` copies every local bin/ and obj/
+# folder too - including project.assets.json from whatever machine last ran `dotnet build` or
+# `dotnet ef migrations add` outside Docker. That file bakes in absolute, host-specific NuGet
+# fallback-folder paths (e.g. Windows' "C:\Program Files (x86)\...\NuGetPackages"), which then
+# overwrite the container's own fresh `dotnet restore` output and break `dotnet publish
+# --no-restore` with a NuGet.Packaging.Core.PackagingException on Linux.
+bin/
+obj/
+**/bin/
+**/obj/
+
+.git/
+.idea/
+.vs/
+**/*.user
+
+deploy/
+loadtest/
