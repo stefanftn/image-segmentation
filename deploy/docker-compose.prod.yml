@@ -141,17 +141,14 @@ services:
     environment:
       <<: *web-env
     ports:
-      # host.docker.internal:4001, matching what routing.html already documents for
-      # moleraj.stefanpopovic.site - nginx now path-splits /api/ and /hubs/ here, / to
-      # frontend below, instead of sending the whole domain to one target.
-      - "4001:8080"
+      - "127.0.0.1:4004:8080"
     networks: [imageseg]
 
   frontend:
     image: imageseg-frontend:latest
     restart: unless-stopped
     ports:
-      - "4004:80"
+      - "127.0.0.1:4001:80"
     networks: [imageseg]
 
 networks:
@@ -162,3 +159,4 @@ volumes:
   postgres-data:
   minio-data:
   ai-sidecar-model-cache:
+    
