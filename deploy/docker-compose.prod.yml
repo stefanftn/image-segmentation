@@ -30,6 +30,7 @@ x-cors-origins: &cors-origins "${CORS_ALLOWED_ORIGINS}"
 x-web-env: &web-env
   DOTNET_ENVIRONMENT: Production
   ASPNETCORE_ENVIRONMENT: Production
+  ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
   ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-imageseg};Username=${POSTGRES_USER:-imageseg};Password=${POSTGRES_PASSWORD:-imageseg}"
   Storage__MinIO__AccessKey: "${MINIO_ROOT_USER:-minioadmin}"
   Storage__MinIO__SecretKey: "${MINIO_ROOT_PASSWORD:-minioadmin}"

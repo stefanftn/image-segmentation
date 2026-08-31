@@ -15,6 +15,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -40,6 +41,13 @@ if (args.Contains("--migrate"))
     Console.WriteLine("Migrations applied successfully.");
     return;
 }
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 // ---- Infrastructure (Postgres, MinIO, AI sidecar clients) --------------------------------
 builder.Services.AddImageSegInfrastructure(builder.Configuration);
@@ -220,6 +228,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseMiddleware<CorrelationIdMiddleware>(); // spec §9 - first in the pipeline
+app.UseForwardedHeaders();
 
 app.UseCors();
 
