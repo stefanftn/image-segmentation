@@ -1,0 +1,37 @@
+name: AI sidecar — build & deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "back/src/AiSidecar/**"
+      - ".github/workflows/ai-sidecar.yml"
+
+concurrency:
+  group: ai-sidecar-deploy
+  cancel-in-progress: false
+
+env:
+  ENV_FILE: /home/moleraj/imageseg-secrets/.env
+  COMPOSE_FILE: deploy/docker-compose.prod.yml
+
+jobs:
+  build-and-deploy:
+    runs-on: [self-hosted, moleraj]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t imageseg-ai-sidecar:latest -f back/src/AiSidecar/Dockerfile back/src/AiSidecar
+
+      - name: Redeploy only the ai-sidecar container
+        run: docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d ai-sidecar
+
+      - name: Prune dangling images
+        run: docker image prune -f
+
+      # Note for whoever's watching this deploy: ai-sidecar's healthcheck has a 600s
+      # start_period (eager model loading, spec §7) - several minutes where the container
+      # reports unhealthy before it's actually ready is expected, not a failure. Model weights
+      # are cached in the ai-sidecar-model-cache volume, so this is only slow on the very
+      # first deploy ever.

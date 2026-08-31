@@ -1,0 +1,164 @@
+# =============================================================================
+# PRODUCTION compose - runs under the `moleraj` Linux user's rootless Docker, via a self-
+# hosted GitHub Actions runner registered to this repo and installed AS that same user. No
+# registry involved: each of the three workflows (.github/workflows/{backend,ai-sidecar,
+# frontend}.yml) builds its image directly on this VM (`docker build`) and immediately runs
+# `docker compose up -d <service>` in the same job - no GHCR, no SSH step, because the runner
+# already IS this machine.
+#
+# Every service is `image:` here too, same as the GHCR version - just pointing at a plain
+# local tag (e.g. "imageseg-web:latest") that the matching workflow's `docker build -t ...`
+# step produces, instead of a ghcr.io/... reference `docker compose pull` would fetch. There
+# is deliberately no `build:` here even though this IS where local builds happen - the build
+# step is explicit and separate (see the workflows) so `docker compose up -d web` only ever
+# recreates the ONE container whose image actually changed, never silently rebuilds others.
+#
+# CRITICAL: deploy/.env is NOT read from inside this git checkout in production. Self-hosted
+# runners re-run `actions/checkout` (which does `git clean -ffdx`, wiping untracked files)
+# on every single job, so anything living inside the checkout - including a gitignored .env -
+# gets deleted on the next run. Real secrets live at a STABLE path outside the checkout
+# (convention: /home/moleraj/imageseg-secrets/.env - see deploy/README.md), and every
+# workflow step passes it explicitly:
+#   docker compose --env-file /home/moleraj/imageseg-secrets/.env -f deploy/docker-compose.prod.yml ...
+# deploy/.env.example (committed, template only) still documents every variable.
+# =============================================================================
+
+name: imageseg
+
+x-cors-origins: &cors-origins "${CORS_ALLOWED_ORIGINS}"
+
+x-web-env: &web-env
+  DOTNET_ENVIRONMENT: Production
+  ASPNETCORE_ENVIRONMENT: Production
+  ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-imageseg};Username=${POSTGRES_USER:-imageseg};Password=${POSTGRES_PASSWORD:-imageseg}"
+  Storage__MinIO__AccessKey: "${MINIO_ROOT_USER:-minioadmin}"
+  Storage__MinIO__SecretKey: "${MINIO_ROOT_PASSWORD:-minioadmin}"
+  # https://minio.stefanpopovic.site - MinIO reached through nginx on its own subdomain (spec
+  # §6's "browser must be able to reach this directly" requirement), not the internal
+  # container port. MinIoStorageService derives UseSSL from the "https://" prefix here
+  # automatically - no separate flag needed (Infrastructure/Shared/Storage/MinIoStorageService.cs).
+  Storage__MinIO__PublicEndpoint: "${MINIO_PUBLIC_ENDPOINT}"
+  Cors__AllowedOrigins: *cors-origins
+  AiSidecar__BaseUrl: "http://ai-sidecar:8000"
+  AiSidecar__RegionsBackend: "${AI_SIDECAR_REGIONS_BACKEND:-Local}"
+  AiSidecar__Colab__BaseUrl: "${AI_SIDECAR_COLAB_BASE_URL:-}"
+  Authentication__Google__ClientId: "${GOOGLE_CLIENT_ID:-}"
+  Authentication__Google__ClientSecret: "${GOOGLE_CLIENT_SECRET:-}"
+  Authentication__Jwt__SigningKey: "${JWT_SIGNING_KEY}"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: imageseg-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-imageseg}
+      POSTGRES_USER: ${POSTGRES_USER:-imageseg}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-imageseg}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-imageseg} -d ${POSTGRES_DB:-imageseg}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [imageseg]
+
+  minio:
+    image: minio/minio:RELEASE.2024-09-22T00-33-43Z
+    container_name: imageseg-minio
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      # "null" appended for the redirect-tainted-origin case (spec §8's 302 to a presigned
+      # URL) - see back/README.md for the full Fetch-spec explanation. The real origin here
+      # is https://moleraj.stefanpopovic.site, not localhost.
+      MINIO_API_CORS_ALLOW_ORIGIN: "${CORS_ALLOWED_ORIGINS},null"
+    ports:
+      # Published on the host so root Nginx (a completely separate Docker daemon - see
+      # deploy/README.md's isolation note) can reach it via host.docker.internal, the same
+      # mechanism already used for Ketering's :4002/:4003. Console (9001) deliberately NOT
+      # published - it's an admin UI, nothing in this system needs it reachable from outside.
+      - "4005:9000"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [imageseg]
+
+  minio-init:
+    image: minio/mc:RELEASE.2024-09-16T17-43-14Z
+    container_name: imageseg-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "/scripts/init.sh"]
+    environment:
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET: images
+    volumes:
+      - ./minio-init:/scripts:ro
+    networks: [imageseg]
+
+  ai-sidecar:
+    image: imageseg-ai-sidecar:latest
+    volumes:
+      - ai-sidecar-model-cache:/models-cache
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:8000/health/ready')\""]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 600s
+    restart: unless-stopped
+    networks: [imageseg]
+
+  migrate:
+    image: imageseg-web:latest
+    environment:
+      <<: *web-env
+    entrypoint: ["dotnet", "ImageSeg.Web.dll", "--migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [imageseg]
+
+  web:
+    image: imageseg-web:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ai-sidecar:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      <<: *web-env
+    ports:
+      # host.docker.internal:4001, matching what routing.html already documents for
+      # moleraj.stefanpopovic.site - nginx now path-splits /api/ and /hubs/ here, / to
+      # frontend below, instead of sending the whole domain to one target.
+      - "4001:8080"
+    networks: [imageseg]
+
+  frontend:
+    image: imageseg-frontend:latest
+    restart: unless-stopped
+    ports:
+      - "4004:80"
+    networks: [imageseg]
+
+networks:
+  imageseg:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  minio-data:
+  ai-sidecar-model-cache:

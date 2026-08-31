@@ -1,0 +1,48 @@
+name: Backend — build & deploy
+
+# Runs on the self-hosted runner registered under the `moleraj` Linux user (see
+# deploy/README.md) - NOT a GitHub-hosted runner. This is what keeps this workflow confined to
+# moleraj's own rootless Docker daemon, isolated from root Docker (reverse-proxy, docs,
+# ketering) the same way the rest of that isolation already works. Do not change `runs-on` to
+# `ubuntu-latest` or drop the `moleraj` label without re-reading that isolation note.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "back/src/ImageSeg.Domain/**"
+      - "back/src/ImageSeg.Application/**"
+      - "back/src/ImageSeg.Infrastructure/**"
+      - "back/src/ImageSeg.Web/**"
+      - "back/ImageSeg.sln"
+      - ".github/workflows/backend.yml"
+
+concurrency:
+  group: backend-deploy
+  cancel-in-progress: false
+
+env:
+  # Real secrets live outside this checkout - see docker-compose.prod.yml's header. Every
+  # compose invocation below passes --env-file explicitly rather than relying on Compose's
+  # auto-discovered deploy/.env, which does not exist inside this ephemeral-per-run checkout.
+  ENV_FILE: /home/moleraj/imageseg-secrets/.env
+  COMPOSE_FILE: deploy/docker-compose.prod.yml
+
+jobs:
+  build-and-deploy:
+    runs-on: [self-hosted, moleraj]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t imageseg-web:latest -f back/src/ImageSeg.Web/Dockerfile back
+
+      - name: Run pending migrations
+        # Safe on every deploy, not just ones that added a new migration - EF Core's migrator
+        # only applies pending ones (spec §12), so this is a no-op most of the time.
+        run: docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" run --rm migrate
+
+      - name: Redeploy only the web container
+        run: docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d web
+
+      - name: Prune dangling images
+        run: docker image prune -f
