@@ -110,6 +110,12 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
         options.ClientId = googleClientId;
         options.ClientSecret = googleClientSecret;
         options.SignInScheme = IdentityConstants.ExternalScheme;
+
+        // Default is "/signin-google" - moved under /api/ so it lands on this same backend
+        // through the reverse proxy's existing /api/ routing (see deploy/nginx-additions.conf),
+        // instead of needing its own dedicated nginx location block that would have to be
+        // remembered and duplicated for every future OAuth provider added later.
+        options.CallbackPath = "/api/auth/signin-google";
     });
 }
 else

@@ -158,12 +158,14 @@ GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
 ```
 
-Register `http://localhost:8080/signin-google` as the authorized redirect URI in Google Cloud
-Console for local dev — this is `GoogleDefaults.CallbackPath`, an ASP.NET Core framework
-default the OAuth handler intercepts directly, and it's what Google actually receives as
+Register `http://localhost:8080/api/auth/signin-google` as the authorized redirect URI in
+Google Cloud Console for local dev — this is the OAuth handler's `CallbackPath`, set in
+`Program.cs`'s `AddGoogle` call (the ASP.NET Core default would be `/signin-google`; it's moved
+under `/api/` so it matches the reverse proxy's existing `/api/` routing in production, instead
+of needing its own dedicated nginx location block). This is what Google actually receives as
 `redirect_uri`. It is **not** `/api/auth/external-login-callback`: that path only comes into
-play *after* the framework's own callback handling finishes and redirects the browser onward
-internally — Google itself never sees or redirects to it.
+play *after* the OAuth handler's own callback handling finishes and redirects the browser
+onward internally — Google itself never sees or redirects to it.
 
 ### Generating a new migration
 

@@ -198,11 +198,12 @@ public sealed class AuthController : ControllerBase
     /// (?access_token= or ?two_factor_token=) since there is no other channel to hand a token
     /// to client-side JS at the end of a server-driven OAuth redirect chain.
     ///
-    /// NOT the URI Google redirects to - that's GoogleDefaults.CallbackPath ("/signin-google"),
-    /// intercepted directly by the OAuth handler before this action ever runs (register
-    /// "/signin-google" in Google Cloud Console, not this path). This action only runs
-    /// afterward, once ConfigureExternalAuthenticationProperties's redirectUrl (set below) is
-    /// followed internally by the framework.
+    /// NOT the URI Google redirects to - that's the OAuth handler's own CallbackPath
+    /// ("/api/auth/signin-google", set in Program.cs's AddGoogle call), intercepted directly
+    /// by the handler before this action ever runs (register that path in Google Cloud
+    /// Console, not this one). This action only runs afterward, once
+    /// ConfigureExternalAuthenticationProperties's redirectUrl (set below) is followed
+    /// internally by the framework.
     /// </summary>
     [HttpGet("external-login-callback")]
     [AllowAnonymous]
