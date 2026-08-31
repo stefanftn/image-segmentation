@@ -1,0 +1,1067 @@
+/* =============================================================
+   Maskwork — stylesheet
+
+   Direction: a warm, plain-language studio rather than an instrument
+   panel. Cream surround, deep forest ink, one sage-green accent used
+   for anything selected, active, or awaiting a click. Cards are
+   generously rounded and softly lifted so the three big jobs — load a
+   photo, wait for it, build and revisit a group of regions — read as
+   calm, obvious steps rather than a form.
+
+   Layout map:
+     .masthead   band across the top, fixed
+     .workbench  stage (left, fixed) + rail (right, scrolls on its own)
+   The page itself never scrolls on desktop — only .rail does, so a long
+   list of controls or saved selections never carries the photo away with
+   it. Narrow screens (<=980px) fall back to normal page scrolling, where
+   a fixed-height rail would just be a second scrollbar fighting the first.
+
+   Visibility: every element carrying data-when is hidden unless the
+   current body[data-state] appears in its list. Elements that need a
+   display other than block set --d inline.
+   ============================================================= */
+
+:root {
+  /* surfaces */
+  --surround:   #f3efe4;
+  --surround-2: #e9e2cf;
+  --paper:      #fffefb;
+  --well:       #1c231c;
+  --line:       #e3dcc8;
+  --line-soft:  #ece6d6;
+
+  /* ink */
+  --ink:        #212b1f;
+  --ink-2:      #4c5a45;
+  --muted:      #83886f;
+  --on-well:    #eef0e6;
+
+  /* signal — one accent, sage/forest green */
+  --mask:       #3f6b4a;
+  --mask-ink:   #2c4d35;
+  --mask-wash:  rgba(63, 107, 74, 0.10);
+  --mask-soft:  #dfe9df;
+  --info:       #3d6d80;
+  --warn:       #9c6a1f;
+  --bad:        #b13b31;
+  --bad-wash:   rgba(177, 59, 49, 0.08);
+
+  /* type — no monospace anywhere: --mono is kept as an alias only so nothing
+     that still references it (a direct rule, not just the .mono class) goes
+     unstyled; every one of those spots renders in the site's own sans now. */
+  --display: "Bricolage Grotesque", "Trebuchet MS", system-ui, sans-serif;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: var(--sans);
+
+  /* metrics */
+  --rail: 384px;
+  --gap: 22px;
+  --r: 18px;             /* cards */
+  --r-sm: 12px;          /* controls, chips */
+  --r-pill: 999px;       /* buttons */
+  --shadow: 0 1px 1px rgba(33,43,31,.03), 0 14px 32px -20px rgba(33,43,31,.35);
+  --shadow-lift: 0 6px 16px -8px rgba(33,43,31,.28);
+}
+
+* { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink);
+  background:
+    radial-gradient(1200px 480px at 12% -10%, #faf7ec 0%, transparent 60%),
+    var(--surround);
+  display: grid;
+  grid-template-rows: auto 1fr;   /* masthead, workbench — no footer row */
+  min-height: 100%;
+}
+
+/* Desktop only: the page itself is a fixed frame. .rail is the one thing
+   that scrolls (see .rail below) — everything else, including the stage,
+   stays put so the photo is never carried off by a long control list. */
+@media (min-width: 981px) {
+  body { height: 100%; overflow: hidden; }
+  .workbench { min-height: 0; height: 100%; overflow: hidden; }
+  .stage { min-height: 0; height: 100%; }
+  .well { flex: 1 1 auto; min-height: 0; height: auto; }
+}
+
+.mono { font-family: var(--mono); font-variant-ligatures: none; }
+
+/* ---------- visibility driven by body[data-state] ---------- */
+[data-when] { display: none; }
+body[data-state="idle"]      [data-when~="idle"],
+body[data-state="uploading"] [data-when~="uploading"],
+body[data-state="tracking"]  [data-when~="tracking"],
+body[data-state="ready"]     [data-when~="ready"],
+body[data-state="error"]     [data-when~="error"] { display: var(--d, block); }
+
+/* The hidden attribute has to beat our own display rules, since several
+   hidden elements are otherwise flex or grid. */
+[hidden] { display: none !important; }
+
+/* Once a photo is composited it stays on screen through every later state —
+   submitting a second surface should not blank the stage. */
+body.has-image .well__empty { display: none !important; }
+body.has-image[data-ready="edit"] .ants { display: none !important; }
+body.has-image[data-ready="edit"] .canvasbox { display: block !important; }
+
+/* The second axis: which face of the ready state is showing. Both rules carry
+   !important because they have to beat the data-when rules above in either
+   direction, and the show rule names data-state as well so nothing tagged for
+   a ready sub-mode can leak into tracking or error. */
+[data-when-ready] { display: none !important; }
+body[data-state="ready"][data-ready="edit"] [data-when-ready~="edit"],
+body[data-state="ready"][data-ready="select"] [data-when-ready~="select"] {
+  display: var(--d, block) !important;
+}
+
+/* Fixed rather than a grid child: cleanest way to sit above body's own
+   masthead/workbench grid without needing a third row for it, and correct
+   for a login screen anyway — full viewport, no page scroll underneath. */
+#authScreen { display: flex; position: fixed; inset: 0; z-index: 30; overflow-y: auto; background: var(--surround); }
+body.authed #authScreen { display: none; }
+body:not(.authed) .masthead,
+body:not(.authed) .workbench { display: none !important; }
+
+.skip {
+  position: absolute; left: -9999px; top: 0; z-index: 20;
+  background: var(--ink); color: var(--paper); padding: 10px 16px;
+  border-radius: 0 0 var(--r-sm) 0;
+}
+.skip:focus { left: 8px; top: 8px; border-radius: var(--r-sm); }
+
+/* ---------- auth screens ---------- */
+.authwrap {
+  width: 100%;
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 20px;
+}
+.authcard {
+  width: 100%;
+  max-width: 380px;
+  background: var(--paper);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+  padding: 28px 26px 24px;
+}
+.authcard__mark { width: 40px; height: 40px; margin: 0 0 16px; }
+.authform { display: none; flex-direction: column; gap: 14px; }
+#authScreen[data-view="login"] .authform[data-authview="login"],
+#authScreen[data-view="register"] .authform[data-authview="register"],
+#authScreen[data-view="twofactor"] .authform[data-authview="twofactor"] {
+  display: flex;
+}
+.authform .card__title { margin: 0 0 4px; }
+.authform__google { width: 100%; }
+.authform__switch { text-align: center; margin: 4px 0 0; }
+.authform.is-busy { opacity: .7; pointer-events: none; }
+
+/* ============================ masthead ============================ */
+.masthead {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 26px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 254, 251, .82);
+  backdrop-filter: blur(8px);
+}
+
+.masthead__mark {
+  flex: none;
+  width: 40px; height: 40px;
+  display: grid; place-items: center;
+  background: var(--ink);
+  border-radius: 12px;
+}
+.masthead__mark svg { width: 24px; height: 24px; display: block; }
+.mark-plate { fill: none; stroke: none; }
+.mark-mask  { fill: #b9d4b9; }
+
+.masthead__title {
+  /* Takes exactly what's left between the icon and the button — not
+     "whatever it happens to end up with" after the button's own sizing is
+     resolved, which is what let a button-sizing bug squeeze this down to a
+     sliver and wrap its subtitle across four narrow lines. min-width:0 is
+     required for a flex item to actually shrink for wrapping rather than
+     overflowing its allotted space. */
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.masthead__title h1 {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 24px;
+  letter-spacing: -0.02em;
+  margin: 0;
+  line-height: 1.1;
+  color: var(--ink);
+}
+.masthead__title p {
+  margin: 4px 0 0;
+  color: var(--ink-2);
+  font-size: 13.5px;
+  max-width: 46ch; /* stays a comfortable reading width instead of stretching edge-to-edge */
+}
+
+/* ============================ workbench ============================ */
+.workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--rail);
+  gap: var(--gap);
+  padding: var(--gap) 26px;
+  align-items: start;
+  min-height: 0;
+}
+
+/* ------------------------------ stage ------------------------------ */
+.stage { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+.well {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 420px;
+  padding: 22px;
+  background:
+    radial-gradient(120% 140% at 50% -10%, #2a332a 0%, var(--well) 55%);
+  border: 1px solid #10140f;
+  border-radius: var(--r);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05), var(--shadow);
+  overflow: hidden;
+}
+/* Every child occupies the same cell, so the canvas, the empty state and the
+   wait indicator stack instead of forming rows. */
+.well > * { grid-area: 1 / 1; }
+
+.well__empty { text-align: center; max-width: 34ch; }
+.well__emptyline {
+  font-family: var(--display);
+  font-size: 21px;
+  color: var(--on-well);
+  margin: 0 0 6px;
+}
+.well__emptyhint { margin: 0; color: #9aa392; font-size: 13.5px; }
+
+.canvasbox { position: relative; display: inline-block; max-width: 100%; max-height: 100%; line-height: 0; }
+/* The actual zoom target (see wireZoom() in app.js). A separate layer from
+   .canvasbox on purpose: .stagetoggle is a sibling of this, not a child, so
+   scaling this via transform never scales the button along with the photo —
+   it stays put at a fixed size in the corner regardless of zoom level. */
+.canvasinner { display: inline-block; line-height: 0; transform-origin: 50% 50%; }
+#display {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100vh - 220px);
+  border-radius: 10px;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.08), 0 20px 44px -24px #000;
+  /* checkerboard shows through if a source ever has transparency */
+  background-image:
+    linear-gradient(45deg, #232b23 25%, transparent 25%),
+    linear-gradient(-45deg, #232b23 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #232b23 75%),
+    linear-gradient(-45deg, transparent 75%, #232b23 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}
+
+/* the wait indicator — a soft, breathing frame + shimmer sweep, plus a
+   friendly caption. Reads as "alive and working", not "selection tool". */
+.ants { place-items: center; }
+.ants__box {
+  position: relative;
+  width: min(420px, 60vw);
+  aspect-ratio: 4 / 3;
+  border: 2px solid rgba(185, 212, 185, .55);
+  border-radius: 14px;
+  background: rgba(185, 212, 185, .06);
+  animation: breathe 2200ms ease-in-out infinite;
+  overflow: hidden;
+}
+.ants__box::after {
+  content: "";
+  position: absolute;
+  inset: -40% -60%;
+  background: linear-gradient(
+    75deg, transparent 40%, rgba(185,212,185,.22) 50%, transparent 60%);
+  animation: shimmer 1900ms ease-in-out infinite;
+}
+@keyframes breathe {
+  0%, 100% { opacity: .7; transform: scale(1); }
+  50%      { opacity: 1;  transform: scale(1.015); }
+}
+@keyframes shimmer {
+  0%   { transform: translateX(-30%); }
+  100% { transform: translateX(30%); }
+}
+.well__working {
+  position: absolute;
+  bottom: 18px;
+  justify-self: center;
+  margin: 0;
+  padding: 8px 18px;
+  color: var(--on-well);
+  font-family: var(--display);
+  font-size: 15px;
+  background: rgba(20, 26, 20, .78);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: var(--r-pill);
+}
+
+.stage__foot { margin: 0; font-size: 11.5px; color: var(--ink-2); gap: 10px; padding: 0 4px; }
+
+/* Both zoom targets get the same smooth transition, whether the change came
+   from the wheel or a button. */
+.canvasinner, .pickerbox { transition: transform .1s ease-out; }
+
+.zoomctrl {
+  position: absolute;
+  bottom: 14px; right: 14px;
+  z-index: 6; /* above the compare overlay and the picker's own canvas */
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: rgba(20, 26, 20, .68);
+  border: 1px solid rgba(255,255,255,.15);
+  border-radius: var(--r-pill);
+  padding: 3px;
+  backdrop-filter: blur(4px);
+}
+.zoomctrl .iconbtn--zoom {
+  width: 28px; height: 28px;
+  display: grid; place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--on-well);
+  border-radius: 50%;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.zoomctrl .iconbtn--zoom:hover { background: rgba(255,255,255,.14); }
+.zoomctrl__level {
+  min-width: 46px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--on-well);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  padding: 4px 2px;
+}
+.zoomctrl__level:hover { color: #fff; }
+
+/* ============================ before / after compare ============================ */
+/* .comparebox sits directly over #display, aligned by .canvasbox shrink-
+   wrapping to the same rendered box both canvases share (see #display /
+   #beforeCanvas — same intrinsic pixel size, same CSS max-width/max-height
+   chain, so no separate alignment math is needed). One custom property,
+   --split, drives the clip and both visual markers at once. */
+.stagetoggle {
+  position: absolute;
+  top: 12px; right: 12px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 13px;
+  border-radius: var(--r-pill);
+  border: 1px solid rgba(255,255,255,.18);
+  background: rgba(20, 26, 20, .6);
+  color: var(--on-well);
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: background .12s ease, border-color .12s ease;
+}
+.stagetoggle:hover { border-color: rgba(255,255,255,.4); }
+.stagetoggle[aria-pressed="true"] { background: var(--mask); border-color: var(--mask); color: #fff; }
+.stagetoggle:focus-visible { outline: 2px solid var(--mask); outline-offset: 2px; }
+
+.comparebox {
+  position: absolute;
+  inset: 0;
+  --split: 50%;
+}
+#beforeCanvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: 10px;
+  /* Reveal only the left --split of the untouched original; the edited
+     #display canvas underneath shows through everywhere else. */
+  clip-path: inset(0 calc(100% - var(--split)) 0 0);
+}
+.comparebox__line {
+  position: absolute;
+  top: 0; bottom: 0;
+  left: var(--split);
+  width: 2px;
+  margin-left: -1px;
+  background: rgba(255,255,255,.9);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.3);
+  pointer-events: none;
+}
+.comparebox__grip {
+  position: absolute;
+  top: 50%; left: var(--split);
+  width: 34px; height: 34px;
+  margin: -17px 0 0 -17px;
+  border-radius: 50%;
+  background: var(--paper);
+  color: var(--ink);
+  display: grid; place-items: center;
+  font-size: 15px;
+  box-shadow: var(--shadow-lift);
+  pointer-events: none;
+}
+.comparebox__tag {
+  position: absolute;
+  top: 14px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  background: rgba(10,12,10,.55);
+  color: var(--on-well);
+  pointer-events: none;
+}
+.comparebox__tag--before { left: 14px; }
+.comparebox__tag--after { right: 14px; }
+/* Click-and-drag anywhere across the image, not just on a thin native
+   track — the input's hit box is the whole overlay; only its computed
+   value (mapped from pointer x) is used, the browser's own thumb and
+   track are invisible. */
+#compareSlider {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: ew-resize;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* ============================ masthead: new photo ============================ */
+.btn--ghost {
+  background: transparent;
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+  padding: 8px 14px;
+  font-size: 13px;
+}
+.btn--ghost:hover { border-color: var(--mask); color: var(--mask-ink); }
+/* Compound selector, not just .masthead__reset: .btn sets width:100% later
+   in this file, and at equal specificity (both are single-class selectors)
+   the later declaration wins regardless of which one "sounds" more specific
+   to the element — .btn.masthead__reset has two classes, which beats .btn's
+   one regardless of order, so this is the one guaranteed to actually apply. */
+.btn.masthead__reset {
+  width: 128px;
+  flex: none;
+  margin-left: auto;
+  justify-content: center;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+
+/* ------------------------------- rail ------------------------------- */
+.rail { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
+
+@media (min-width: 981px) {
+  /* The one thing that scrolls: independent of .stage, with its own
+     scrollbar gutter so a long control list or saved-selection list never
+     drags the photo along with it. overscroll-behavior stops a scroll that
+     reaches the top/bottom of the list from bubbling up and moving the
+     (non-existent, on desktop) page scroll instead. */
+  .rail {
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 4px;
+    scrollbar-gutter: stable;
+  }
+}
+
+.card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+.card--bad { border-color: #e8c3bd; background: #fdf7f5; }
+
+.card__title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+  margin: 0 0 14px;
+  color: var(--ink);
+}
+.card__title--tight { margin-top: 20px; }
+.card__step {
+  font-size: 10.5px;
+  letter-spacing: .1em;
+  color: #fff;
+  background: var(--mask);
+  border-radius: 999px;
+  padding: 2px 8px;
+  line-height: 1.5;
+}
+
+/* ---------- dropzone ---------- */
+.drop {
+  border: 1.5px dashed #c9c0a3;
+  border-radius: var(--r-sm);
+  background: #fffdf8;
+  padding: 22px 16px;
+  cursor: pointer;
+  transition: border-color .12s ease, background .12s ease;
+}
+.drop:hover, .drop:focus-visible { border-color: var(--mask); background: var(--mask-wash); }
+.drop.is-over { border-color: var(--mask); background: var(--mask-wash); border-style: solid; }
+.drop.has-error { border-color: var(--bad); }
+
+.drop__body { display: grid; justify-items: center; text-align: center; gap: 8px; }
+.drop__icon {
+  width: 40px; height: 40px;
+  display: grid; place-items: center;
+  background: var(--mask-soft);
+  border-radius: 50%;
+}
+.drop__icon svg {
+  width: 20px; height: 20px; fill: none;
+  stroke: var(--mask-ink); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round;
+}
+.drop__label { font-weight: 600; font-size: 14px; }
+.drop__meta { font-size: 11.5px; color: var(--muted); }
+
+.drop__file { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.drop__file img {
+  width: 42px; height: 42px; object-fit: cover;
+  border-radius: 10px; border: 1px solid var(--line);
+}
+.drop__filename {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.drop__filesize { color: var(--muted); }
+
+/* ---------- fields ---------- */
+.field { display: grid; gap: 6px; }
+
+input[type="text"] {
+  width: 100%;
+  font: inherit;
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: #fff;
+  color: var(--ink);
+}
+input[type="text"]:focus-visible { outline: 2px solid var(--mask); outline-offset: 1px; border-color: var(--mask); }
+
+.hint { margin: 0; font-size: 12.5px; color: var(--muted); }
+.hint em { font-style: normal; color: var(--ink-2); font-family: var(--mono); font-size: 11.5px; }
+
+.fielderr {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  color: var(--bad);
+  background: var(--bad-wash);
+  border-radius: var(--r-sm);
+  padding: 8px 10px;
+}
+
+.note {
+  margin: 12px 0 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.note--warn { color: var(--warn); }
+
+/* ---------- buttons ---------- */
+.btn {
+  position: relative;
+  width: 100%;
+  font: inherit;
+  font-weight: 600;
+  font-size: 14px;
+  padding: 12px 16px;
+  border-radius: var(--r-pill);
+  border: 1px solid transparent;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: transform .06s ease, background .12s ease, border-color .12s ease, box-shadow .12s ease;
+}
+.btn:active { transform: translateY(1px); }
+.btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+.btn--primary { background: var(--mask); color: #fff; box-shadow: var(--shadow-lift); }
+.btn--primary:hover:not(:disabled) { background: var(--mask-ink); }
+.btn--quiet { background: #fff; color: var(--ink); border-color: var(--line); }
+.btn--quiet:hover { border-color: var(--mask); color: var(--mask-ink); }
+.btn:disabled { opacity: .42; cursor: not-allowed; box-shadow: none; }
+
+.btn__spinner { display: none; width: 13px; height: 13px; }
+body[data-state="uploading"] #submitBtn .btn__spinner,
+.btn.is-busy .btn__spinner {
+  display: block;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+body[data-state="uploading"] #jobForm { opacity: .6; pointer-events: none; }
+
+.btnrow { display: flex; gap: 8px; margin-top: 16px; }
+.btnrow--stack { flex-direction: column; }
+
+.linkbtn {
+  background: none; border: 0; padding: 0;
+  font: inherit; font-size: 12.5px;
+  color: var(--mask-ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.linkbtn:hover { color: var(--ink); }
+.linkbtn--danger { color: var(--bad); }
+
+/* small pill actions used inside list rows (groups, tasks) */
+.chipbtn {
+  font: inherit; font-size: 12px; font-weight: 600;
+  background: #fff;
+  border: 1px solid var(--line);
+  color: var(--mask-ink);
+  padding: 6px 12px;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color .12s ease, background .12s ease;
+}
+.chipbtn:hover { border-color: var(--mask); background: var(--mask-wash); }
+.chipbtn--danger { color: var(--bad); }
+.chipbtn--danger:hover { border-color: var(--bad); background: var(--bad-wash); }
+.chipbtn.is-busy { opacity: .55; pointer-events: none; }
+
+/* ---------- tracking ---------- */
+.statusline { font-family: var(--display); font-size: 20px; margin: 0 0 16px; color: var(--ink); }
+
+/* step trail: three quiet checkpoints, so waiting reads as progress instead
+   of an unmarked spinner. Purely visual — driven by setPollStep() in app.js
+   toggling .is-done / .is-active off the same state text already shown. */
+.steps { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 10px; }
+.step {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px; color: var(--muted);
+  transition: color .2s ease;
+}
+.step__dot {
+  width: 20px; height: 20px; flex: none;
+  border-radius: 50%;
+  border: 1.5px solid var(--line);
+  background: #fff;
+  display: grid; place-items: center;
+  transition: background .2s ease, border-color .2s ease;
+}
+.step__check { font-size: 11px; color: #fff; opacity: 0; transform: scale(.6); transition: opacity .15s ease, transform .15s ease; }
+.step.is-active { color: var(--ink); font-weight: 600; }
+.step.is-active .step__dot {
+  border-color: var(--mask);
+  box-shadow: 0 0 0 3px var(--mask-wash);
+  animation: pulse-dot 1.4s ease-in-out infinite;
+}
+.step.is-done { color: var(--ink-2); }
+.step.is-done .step__dot { background: var(--mask); border-color: var(--mask); }
+.step.is-done .step__check { opacity: 1; transform: scale(1); }
+@keyframes pulse-dot { 0%, 100% { box-shadow: 0 0 0 3px var(--mask-wash); } 50% { box-shadow: 0 0 0 6px transparent; } }
+
+.track {
+  height: 8px;
+  border-radius: var(--r-pill);
+  background: var(--line-soft);
+  overflow: hidden;
+}
+.track__fill {
+  height: 100%;
+  width: 8%;
+  border-radius: var(--r-pill);
+  background: linear-gradient(90deg, var(--mask), #5c8a67);
+  transition: width .6s cubic-bezier(.3,.7,.2,1);
+}
+
+.elapsedline {
+  margin: 14px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ---------- error ---------- */
+.errmsg { margin: 0 0 8px; font-size: 14px; color: var(--ink); }
+
+/* ---------- editing panel ---------- */
+
+/* Surfaces: create, choose, and reorder — always visible (even at one
+   surface), sitting above the colour/texture controls and above Download.
+   Reordering here is real z-order: the compositor draws this array
+   back-to-front, so row order and paint order are the same thing. */
+.surfaces { margin-bottom: 18px; }
+.layers__label { display: block; font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+
+.surfacelist { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 6px; }
+.surfacerow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.surfacerow__select {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; gap: 9px;
+  font: inherit; font-size: 13px; font-weight: 500;
+  text-align: left;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: border-color .12s ease, background .12s ease;
+}
+.surfacerow__select:hover { border-color: var(--mask); }
+.surfacerow__select[aria-pressed="true"] { border-color: var(--mask); background: var(--mask-wash); }
+.surfacerow__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.surfacerow__actions { display: flex; gap: 4px; flex: none; }
+
+.iconbtn {
+  width: 30px; height: 30px;
+  display: grid; place-items: center;
+  font-size: 11px; line-height: 1;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: var(--r-sm);
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: border-color .12s ease, color .12s ease;
+}
+.iconbtn:hover:not(:disabled) { border-color: var(--mask); color: var(--mask-ink); }
+.iconbtn:disabled { opacity: .35; cursor: not-allowed; }
+
+.swatchdot { width: 9px; height: 9px; border-radius: 50%; border: 1px solid rgba(0,0,0,.18); flex: none; }
+
+.surfacerow--add {
+  width: 100%;
+  display: flex; align-items: center; gap: 9px;
+  font: inherit; font-size: 13px; font-weight: 600;
+  padding: 8px 12px;
+  border: 1.5px dashed #c9c0a3;
+  background: transparent;
+  border-radius: var(--r-sm);
+  color: var(--mask-ink);
+  cursor: pointer;
+  transition: border-color .12s ease, background .12s ease;
+}
+.surfacerow--add:hover { border-color: var(--mask); background: var(--mask-wash); }
+.surfacerow__addicon {
+  width: 18px; height: 18px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: var(--mask-soft);
+  font-size: 13px;
+  flex: none;
+}
+
+.control { padding: 16px 0; border-top: 1px solid var(--line-soft); }
+.control:first-of-type { border-top: 0; padding-top: 0; }
+.control__head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin-bottom: 9px;
+}
+.control__head--sub { margin-top: 14px; }
+.control__head label { font-weight: 600; font-size: 13.5px; }
+.control__head output { font-size: 11.5px; color: var(--muted); font-family: var(--mono); }
+.control__toggles { display: flex; align-items: center; justify-content: space-between; }
+
+.swatches { display: grid; grid-template-columns: repeat(8, 1fr); gap: 7px; margin-bottom: 12px; }
+.swatch {
+  aspect-ratio: 1;
+  border: 1px solid rgba(33,43,31,.15);
+  border-radius: 8px;
+  cursor: pointer;
+  padding: 0;
+  transition: transform .1s ease;
+}
+.swatch:hover { transform: scale(1.06); }
+.swatch[aria-pressed="true"] { outline: 2px solid var(--mask); outline-offset: 2px; }
+.swatch:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+.tintrow { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+input[type="color"] {
+  width: 46px; height: 32px; padding: 0;
+  border: 1px solid var(--line); border-radius: 8px; background: #fff; cursor: pointer;
+}
+#tintReadout { font-size: 12px; color: var(--muted); }
+
+.textures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+.texture {
+  height: 48px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+  position: relative;
+  background-size: 46px 46px;
+  background-color: #fff;
+  padding: 0;
+  overflow: hidden;
+}
+.texture span {
+  position: absolute; inset: auto 0 0 0;
+  font-family: var(--mono); font-size: 9.5px;
+  background: rgba(255,255,255,.88);
+  color: var(--ink);
+  padding: 2px 0;
+  letter-spacing: .03em;
+}
+.texture[aria-pressed="true"] { outline: 2px solid var(--mask); outline-offset: 2px; border-color: var(--mask); }
+.texture:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* range inputs */
+input[type="range"] {
+  width: 100%;
+  -webkit-appearance: none; appearance: none;
+  background: transparent;
+  cursor: grab;
+}
+input[type="range"]:active { cursor: grabbing; }
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px; background: var(--line); border-radius: 999px;
+}
+input[type="range"]::-moz-range-track { height: 4px; background: var(--line); border-radius: 999px; }
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 17px; height: 17px; margin-top: -6.5px;
+  border-radius: 50%; background: var(--mask); border: 2px solid var(--paper);
+  box-shadow: 0 0 0 1px var(--mask);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 17px; height: 17px; border-radius: 50%;
+  background: var(--mask); border: 2px solid var(--paper); box-shadow: 0 0 0 1px var(--mask);
+}
+input[type="range"]:focus-visible::-webkit-slider-thumb { background: var(--mask-ink); box-shadow: 0 0 0 1px var(--mask-ink); }
+
+.check { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; cursor: pointer; }
+.check input { accent-color: var(--mask); width: 15px; height: 15px; }
+
+/* ============================ toast ============================ */
+.toast {
+  position: fixed;
+  left: 50%; bottom: 52px;
+  transform: translateX(-50%);
+  background: var(--ink);
+  color: #eef0e6;
+  padding: 11px 18px;
+  border-radius: var(--r-pill);
+  font-size: 13px;
+  box-shadow: 0 16px 34px -16px rgba(0,0,0,.5);
+  z-index: 30;
+}
+
+/* ============================ responsive ============================ */
+@media (max-width: 980px) {
+  .workbench { grid-template-columns: minmax(0, 1fr); padding: 16px; }
+  .well { height: auto; min-height: 320px; }
+  #display, #picker { max-height: 56vh; }
+  .masthead { flex-wrap: wrap; padding: 14px 16px; }
+  .masthead__reset { margin-left: 0; }
+}
+
+@media (max-width: 460px) {
+  .swatches { grid-template-columns: repeat(6, 1fr); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+  /* the wait indicator still has to read as "busy" without motion */
+  .track__fill { transition: none; }
+  .ants__box, .ants__box::after, .step.is-active .step__dot { animation: none; opacity: .8; }
+}
+
+/* ============================ operation choice ============================ */
+.ops { display: grid; gap: 9px; margin-bottom: 18px; }
+
+.op {
+  display: flex;
+  gap: 12px;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: #fff;
+  cursor: pointer;
+  transition: border-color .12s ease, background .12s ease;
+}
+.op:hover { border-color: #b7c9b9; }
+.op input { margin: 3px 0 0; accent-color: var(--mask); flex: none; }
+.op__body { display: grid; gap: 3px; }
+.op__name { font-weight: 600; font-size: 14px; }
+.op__desc { font-size: 12px; color: var(--muted); line-height: 1.4; }
+.op:has(input:checked) { border-color: var(--mask); background: var(--mask-wash); }
+.op:has(input:focus-visible) { outline: 2px solid var(--ink); outline-offset: 1px; }
+
+.fieldlabel { font-weight: 600; font-size: 13.5px; display: block; }
+.field--mode { gap: 8px; margin-bottom: 4px; }
+
+/* segmented control — two fixed choices, so a pair of buttons beats a select */
+.segmented {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  overflow: hidden;
+  background: #fff;
+  padding: 3px;
+  gap: 3px;
+}
+.segmented label {
+  position: relative;
+  text-align: center;
+  padding: 8px 8px;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: var(--r-pill);
+}
+.segmented input { position: absolute; opacity: 0; pointer-events: none; }
+.segmented label:has(input:checked) { background: var(--mask); color: #fff; font-weight: 600; }
+.segmented label:has(input:focus-visible) { outline: 2px solid var(--mask); outline-offset: 1px; }
+
+/* ============================ resume ============================ */
+.resume { margin-top: 18px; border-top: 1px solid var(--line-soft); padding-top: 14px; }
+.resumepanel { margin-top: 10px; }
+.resume__head {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--muted); margin: 12px 0 8px;
+}
+
+.tasklist { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 240px; overflow-y: auto; }
+.taskitem {
+  display: flex; align-items: center; gap: 10px;
+  border: 1px solid var(--line); border-radius: var(--r-sm); background: #fff;
+  padding: 10px 12px; font-size: 12.5px;
+  transition: box-shadow .12s ease, border-color .12s ease, background .12s ease;
+}
+.taskitem:hover { border-color: #cdd9cc; box-shadow: var(--shadow-lift); }
+.taskitem--active { border-color: var(--mask); background: var(--mask-wash); }
+.taskitem__main {
+  /* A <button>, not a <div> — this is the click-to-preview control, kept
+     separate from "Open" (see toggleTaskPreview in app.js). Reset to look
+     like the plain text block it used to be. */
+  flex: 1; min-width: 0; display: grid; gap: 2px;
+  font: inherit; text-align: left;
+  background: none; border: 0; padding: 0;
+  cursor: pointer;
+  border-radius: var(--r-sm);
+}
+.taskitem__main:focus-visible { outline: 2px solid var(--mask); outline-offset: 3px; }
+.taskitem__name { font-weight: 600; }
+.taskitem__meta { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+.taskitem .btn { width: auto; padding: 6px 12px; font-size: 12px; }
+
+.taskpreview {
+  display: block;
+  max-width: min(340px, 70vw);
+  max-height: 230px;
+  margin: 0 auto 14px;
+  border-radius: 10px;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.10), 0 16px 36px -20px #000;
+  background: #1b201b;
+}
+
+/* ============================ region selection ============================ */
+.pickerbox { position: relative; display: inline-block; max-width: 100%; max-height: 100%; line-height: 0; transform-origin: 50% 50%; }
+#picker {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100vh - 220px);
+  border-radius: 10px;
+  cursor: crosshair;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.08), 0 20px 44px -24px #000;
+}
+#picker:focus-visible { outline: 2px solid var(--mask); outline-offset: 3px; }
+
+.selstat {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--muted); margin: 14px 0 10px;
+}
+.selstat .dot { width: 3px; height: 3px; border-radius: 50%; background: var(--mask); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; min-height: 4px; }
+.chip {
+  font-family: var(--mono); font-size: 11.5px;
+  border: 1px solid var(--mask);
+  color: var(--mask-ink);
+  background: var(--mask-wash);
+  border-radius: var(--r-pill); padding: 3px 9px;
+  display: inline-flex; align-items: center; gap: 6px;
+  cursor: pointer;
+  transition: background .12s ease, color .12s ease;
+}
+.chip:hover { background: var(--mask); color: #fff; }
+.chip__x { font-size: 12px; line-height: 1; opacity: .7; }
+
+/* -------- saved selections: the "groups" the user builds and revisits -------- */
+.groups { margin-top: 20px; border-top: 1px solid var(--line-soft); padding-top: 16px; }
+.grouplist { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 8px; }
+.groupitem {
+  display: flex; align-items: center; gap: 10px;
+  border: 1px solid var(--line); border-radius: var(--r-sm); background: #fff;
+  padding: 10px 10px 10px 12px; font-size: 13px;
+  transition: box-shadow .12s ease, border-color .12s ease;
+}
+.groupitem:hover { border-color: #cdd9cc; box-shadow: var(--shadow-lift); }
+.groupitem__icon {
+  flex: none;
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: var(--mask-soft);
+  color: var(--mask-ink);
+  display: grid; place-items: center;
+  font-weight: 700; font-size: 12.5px;
+  font-family: var(--display);
+}
+.groupitem__main { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.groupitem__name { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.groupitem__meta { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+.groupitem__actions { display: flex; gap: 6px; flex: none; }
+
+.btnrow .btn { width: auto; flex: 1; }

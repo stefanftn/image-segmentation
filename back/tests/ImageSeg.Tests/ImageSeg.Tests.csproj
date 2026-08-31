@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>ImageSeg.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- References Web directly (not just Application/Domain) so tests exercise the real,
+         fully-wired app - middleware pipeline, DI composition, the exact bugs this project's
+         history has actually hit (default auth scheme, Google registered-but-unconfigured,
+         rate limiter ordering) live at this layer, not lower. -->
+    <ProjectReference Include="..\..\src\ImageSeg.Web\ImageSeg.Web.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="9.0.0" />
+    <!-- SQLite, not Postgres: auth tests never touch the Postgres-specific raw SQL (claim
+         query) or ExecuteUpdateAsync paths - only standard Identity/EF Core CRUD, which SQLite
+         models faithfully enough (real unique constraints, real FKs) without needing Docker/
+         Testcontainers just to run `dotnet test`. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="FluentAssertions" Version="6.12.1" />
+  </ItemGroup>
+
+</Project>

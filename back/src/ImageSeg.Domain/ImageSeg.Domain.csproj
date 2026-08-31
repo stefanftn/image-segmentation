@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>ImageSeg.Domain</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      The only package reference in the whole solution's innermost layer. This is a types-only
+      package (IdentityUser, etc.) with no ASP.NET Core hosting dependency, so ApplicationUser
+      can live here without pulling any Infrastructure- or Web-layer concern into Domain.
+    -->
+    <PackageReference Include="Microsoft.Extensions.Identity.Stores" Version="9.0.0" />
+  </ItemGroup>
+
+</Project>

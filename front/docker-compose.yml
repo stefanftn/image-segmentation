@@ -1,0 +1,15 @@
+# Standalone: `docker compose up` from this folder is enough to run the
+# frontend on its own. Port 5173 is what CORS is already configured for on
+# the backend (see backend Cors__AllowedOrigins) — one ASP.NET Core process
+# now, not a gateway in front of several — see README.md for how to add this
+# as a service in the backend's own compose file instead, if you'd rather
+# start everything with one command. Confirm the backend's own compose file
+# still publishes its one Web process on the port this frontend expects
+# (js/config.js's API_BASE_URL) — that's the one thing this migration could
+# have moved without anything here noticing.
+services:
+  frontend:
+    build: .
+    ports:
+      - "5173:80"
+    restart: unless-stopped

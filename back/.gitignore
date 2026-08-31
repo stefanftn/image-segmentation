@@ -1,0 +1,11 @@
+bin/
+obj/
+*.user
+.vs/
+.idea/
+*.DotSettings.user
+TestResults/
+
+# Real secrets live only in deploy/.env (gitignored); deploy/.env.example is the committed
+# template. This pattern matches ".env" anywhere in the tree without touching ".env.example".
+.env

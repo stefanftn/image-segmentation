@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>ImageSeg.Web</RootNamespace>
+    <UserSecretsId>imageseg-web</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The only project that references both Application (business logic) and Infrastructure
+         (concrete implementations) - and the only one that ever needs to (spec §1). Program.cs
+         is the sole composition root: the one place allowed to see every concrete class so it
+         can wire them together behind their Domain/Application interfaces. -->
+    <ProjectReference Include="..\ImageSeg.Application\ImageSeg.Application.csproj" />
+    <ProjectReference Include="..\ImageSeg.Infrastructure\ImageSeg.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.Google" Version="9.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>
