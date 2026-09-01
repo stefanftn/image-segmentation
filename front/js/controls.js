@@ -16,11 +16,12 @@
  */
 
 import { CONFIG } from "./config.js";
+import { t } from "./i18n.js";
 import { TEXTURES, getTextureTile, defaultEdits } from "./compositor.js";
 
 const $ = (id) => document.getElementById(id);
 
-export function createControls({ compositor, onEdit = () => {} }) {
+export function createControls({ compositor, onEdit = () => {}, onHistoryChange = () => {} }) {
   const el = {
     swatches: $("swatches"),
     tint: $("tint"),
@@ -47,6 +48,78 @@ export function createControls({ compositor, onEdit = () => {} }) {
 
   let activeId = null;
   let frame = 0;
+
+  /* --------------------- history (undo/redo) ---------------------
+     A snapshot is the edits AND the mask of every layer, plus which one was
+     active — restoring one puts the whole panel back exactly as it was, not
+     just the control that changed. The edits half is genuinely free (small
+     plain objects); the mask half stays cheap too, because it's a
+     *reference*, not a clone — brush.js hands each stroke a brand new mask
+     canvas rather than painting into the old one in place (the same
+     never-mutate contract layer.edits already follows for a colour/texture
+     patch), so an earlier snapshot's mask reference simply keeps pointing at
+     whatever canvas was current when it was taken. Deliberately unbounded:
+     "unlimited" undo is just... not capping it.
+     Pushed at *settle* points (a slider's `change`, a button's `click`, a
+     brush stroke's pointerup) — never on `input`/pointermove — so dragging a
+     slider (or a brush) across its whole range is one history entry, not one
+     per tick of movement. */
+  let history = [];
+  let historyIndex = -1;
+
+  function snapshot() {
+    return {
+      activeId,
+      layers: compositor.layers.map((l) => ({ id: l.id, edits: { ...l.edits }, mask: l.mask })),
+    };
+  }
+
+  function notifyHistory() {
+    onHistoryChange({ canUndo: historyIndex > 0, canRedo: historyIndex < history.length - 1 });
+  }
+
+  /** Call after any settled change to the active layer — an edits patch or
+   *  a committed brush stroke. A no-op with nothing to snapshot yet. */
+  function pushHistory() {
+    if (!compositor.layers.length) return;
+    // A new action after undoing some steps discards the abandoned redo
+    // branch — standard undo/redo semantics, not a stack of alternates.
+    history = history.slice(0, historyIndex + 1);
+    history.push(snapshot());
+    historyIndex = history.length - 1;
+    notifyHistory();
+  }
+
+  function applySnapshot(snap) {
+    for (const { id, edits, mask } of snap.layers) {
+      compositor.setEdits(id, edits);
+      if (mask && compositor.getLayer(id)?.mask !== mask) {
+        compositor.updateLayerSource(id, { mask });
+      }
+    }
+    if (snap.activeId && compositor.getLayer(snap.activeId)) {
+      setActiveLayer(snap.activeId);
+    } else {
+      renderSurfaceList();
+      const layer = compositor.getLayer(activeId);
+      if (layer) syncReadouts(layer.edits);
+    }
+    schedule();
+  }
+
+  function undo() {
+    if (historyIndex <= 0) return;
+    historyIndex -= 1;
+    applySnapshot(history[historyIndex]);
+    notifyHistory();
+  }
+
+  function redo() {
+    if (historyIndex >= history.length - 1) return;
+    historyIndex += 1;
+    applySnapshot(history[historyIndex]);
+    notifyHistory();
+  }
 
   /* --------------------- render scheduling --------------------- */
 
@@ -89,6 +162,7 @@ export function createControls({ compositor, onEdit = () => {} }) {
         const patch = { tint: preset.hex };
         if (compositor.getLayer(activeId)?.edits.tintStrength === 0) patch.tintStrength = 1;
         commit(patch);
+        pushHistory();
       });
       el.swatches.append(button);
     }
@@ -118,7 +192,7 @@ export function createControls({ compositor, onEdit = () => {} }) {
       label.textContent = texture.label;
       button.append(label);
 
-      button.addEventListener("click", () => commit({ texture: texture.id }));
+      button.addEventListener("click", () => { commit({ texture: texture.id }); pushHistory(); });
       el.textures.append(button);
     }
   }
@@ -161,7 +235,7 @@ export function createControls({ compositor, onEdit = () => {} }) {
       );
       el.tintReadout.textContent = preset ? `${preset.name} ${edits.tint}` : edits.tint;
     } else {
-      el.tintReadout.textContent = "off";
+      el.tintReadout.textContent = t("edit.colorOffReadout");
     }
 
     for (const button of el.swatches.querySelectorAll(".swatch")) {
@@ -205,8 +279,8 @@ export function createControls({ compositor, onEdit = () => {} }) {
       const up = document.createElement("button");
       up.type = "button";
       up.className = "iconbtn";
-      up.setAttribute("aria-label", `Move ${layer.label} up`);
-      up.title = "Move up";
+      up.setAttribute("aria-label", t("edit.moveUpAria", { label: layer.label }));
+      up.title = t("edit.moveUp");
       up.textContent = "▲";
       up.disabled = index === 0;
       up.addEventListener("click", (event) => {
@@ -220,8 +294,8 @@ export function createControls({ compositor, onEdit = () => {} }) {
       const down = document.createElement("button");
       down.type = "button";
       down.className = "iconbtn";
-      down.setAttribute("aria-label", `Move ${layer.label} down`);
-      down.title = "Move down";
+      down.setAttribute("aria-label", t("edit.moveDownAria", { label: layer.label }));
+      down.title = t("edit.moveDown");
       down.textContent = "▼";
       down.disabled = index === layers.length - 1;
       down.addEventListener("click", (event) => {
@@ -254,13 +328,16 @@ export function createControls({ compositor, onEdit = () => {} }) {
       activeId = layer.id;
       syncReadouts(layer.edits);
     }
+    if (history.length === 0 && compositor.layers.length > 0) pushHistory();
     schedule();
   }
 
   /* --------------------- listeners --------------------- */
 
   el.hue.addEventListener("input", () => commit({ hue: Number(el.hue.value) }));
+  el.hue.addEventListener("change", pushHistory);
   el.sat.addEventListener("input", () => commit({ saturation: Number(el.sat.value) }));
+  el.sat.addEventListener("change", pushHistory);
   el.tint.addEventListener("input", () => {
     const patch = { tint: el.tint.value };
     // Same reasoning as the swatch handler: dragging the colour wheel while
@@ -268,16 +345,21 @@ export function createControls({ compositor, onEdit = () => {} }) {
     if (compositor.getLayer(activeId)?.edits.tintStrength === 0) patch.tintStrength = 1;
     commit(patch);
   });
-  el.tintOff.addEventListener("click", () => commit({ tint: null }));
+  el.tint.addEventListener("change", pushHistory);
+  el.tintOff.addEventListener("click", () => { commit({ tint: null }); pushHistory(); });
   el.tintStrength.addEventListener("input", () =>
     commit({ tintStrength: Number(el.tintStrength.value) / 100 }));
+  el.tintStrength.addEventListener("change", pushHistory);
 
   el.texStrength.addEventListener("input", () =>
     commit({ textureStrength: Number(el.texStrength.value) / 100 }));
+  el.texStrength.addEventListener("change", pushHistory);
   el.texRotation.addEventListener("input", () =>
     commit({ textureRotation: Number(el.texRotation.value) }));
+  el.texRotation.addEventListener("change", pushHistory);
   el.texDepth.addEventListener("input", () =>
     commit({ textureDepth: Number(el.texDepth.value) }));
+  el.texDepth.addEventListener("change", pushHistory);
 
   el.showMask.addEventListener("change", () => {
     compositor.showMaskEdge = el.showMask.checked;
@@ -290,6 +372,7 @@ export function createControls({ compositor, onEdit = () => {} }) {
     syncReadouts(compositor.getLayer(activeId).edits);
     schedule();
     renderSurfaceList();
+    pushHistory();
   });
 
   buildSwatches();
@@ -300,6 +383,12 @@ export function createControls({ compositor, onEdit = () => {} }) {
     setActiveLayer,
     refresh,
     schedule,
+    undo,
+    redo,
+    /** Public entry point for anything outside this module that just made a
+     *  settled change to the active layer — currently only brush.js, after
+     *  a stroke commits. */
+    commitHistoryCheckpoint: pushHistory,
     get activeId() { return activeId; },
     /** Called when the photo is replaced: back to a clean panel. */
     resetPanel() {
@@ -308,6 +397,9 @@ export function createControls({ compositor, onEdit = () => {} }) {
       el.showMask.checked = false;
       el.surfaceList.innerHTML = "";
       syncReadouts(defaultEdits());
+      history = [];
+      historyIndex = -1;
+      notifyHistory();
     },
   };
 }

@@ -8,7 +8,7 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" />
 <link rel="stylesheet" href="styles.css" />
 <!-- SignalR client — replaces the old poll loop (§2). No build step in this
      project, so this is a CDN script rather than an npm dependency; it
@@ -41,82 +41,84 @@
 -->
 <body data-state="idle" data-ready="edit">
 
-<a class="skip" href="#rail">Skip to controls</a>
+<a class="skip" href="#rail" data-i18n="common.skipToControls">Skip to controls</a>
 
 <!-- ───────────────────────── AUTH ───────────────────────── -->
 <!-- Shown instead of everything else while body is not .authed (see app.js
      toggleAuthed()). #authScreen's own data-view picks which of the three
      forms below is visible — plain CSS, same pattern as data-when above. -->
 <section class="authwrap" id="authScreen" data-view="login" aria-labelledby="authTitle">
+  <button type="button" class="iconbtn iconbtn--theme authwrap__theme" id="themeToggleAuth"
+          aria-pressed="true" data-i18n-attr="title:common.themeToggle" title="Switch theme">
+    <span class="themeicon themeicon--sun" aria-hidden="true">☀</span>
+    <span class="themeicon themeicon--moon" aria-hidden="true">☾</span>
+  </button>
   <div class="authcard">
     <div class="masthead__mark authcard__mark" aria-hidden="true">
-      <svg viewBox="0 0 40 40" role="presentation">
-        <rect x="1.5" y="1.5" width="37" height="37" rx="3" class="mark-plate" />
-        <path d="M8 27c3-9 6-13 11-13s9 4 13 13z" class="mark-mask" />
-      </svg>
+      <span class="masthead__logo"></span>
     </div>
 
     <!-- ── Login ── -->
     <form class="authform" id="loginForm" data-authview="login" novalidate>
-      <h2 class="card__title" id="authTitle">Sign in to Maskwork</h2>
+      <h2 class="card__title" id="authTitle" data-i18n="auth.login.title">Sign in to Maskwork</h2>
       <div class="field">
-        <label class="fieldlabel" for="loginEmail">Email</label>
+        <label class="fieldlabel" for="loginEmail" data-i18n="auth.login.emailLabel">Email</label>
         <input type="email" id="loginEmail" autocomplete="username" required />
       </div>
       <div class="field">
-        <label class="fieldlabel" for="loginPassword">Password</label>
+        <label class="fieldlabel" for="loginPassword" data-i18n="auth.login.passwordLabel">Password</label>
         <input type="password" id="loginPassword" autocomplete="current-password" required />
       </div>
       <p class="fielderr" id="loginError" role="alert" hidden></p>
       <button type="submit" class="btn btn--primary" id="loginSubmit">
         <span class="btn__spinner" aria-hidden="true"></span>
-        <span class="btn__label">Sign in</span>
+        <span class="btn__label" data-i18n="auth.login.submit">Sign in</span>
       </button>
-      <button type="button" class="btn btn--quiet authform__google" id="googleLoginBtn">
+      <button type="button" class="btn btn--quiet authform__google" id="googleLoginBtn" data-i18n="auth.login.google">
         Continue with Google
       </button>
       <p class="note authform__switch">
-        No account? <button type="button" class="linkbtn" id="toRegister">Register</button>
+        <span data-i18n="auth.login.noAccount">No account?</span> <button type="button" class="linkbtn" id="toRegister" data-i18n="auth.login.registerLink">Register</button>
       </p>
     </form>
 
     <!-- ── Register ── -->
     <form class="authform" id="registerForm" data-authview="register" novalidate>
-      <h2 class="card__title">Create an account</h2>
+      <h2 class="card__title" data-i18n="auth.register.title">Create an account</h2>
       <div class="field">
-        <label class="fieldlabel" for="registerEmail">Email</label>
+        <label class="fieldlabel" for="registerEmail" data-i18n="auth.register.emailLabel">Email</label>
         <input type="email" id="registerEmail" autocomplete="username" required />
       </div>
       <div class="field">
-        <label class="fieldlabel" for="registerPassword">Password</label>
+        <label class="fieldlabel" for="registerPassword" data-i18n="auth.register.passwordLabel">Password</label>
         <input type="password" id="registerPassword" autocomplete="new-password" required />
       </div>
       <p class="fielderr" id="registerError" role="alert" hidden></p>
       <button type="submit" class="btn btn--primary" id="registerSubmit">
         <span class="btn__spinner" aria-hidden="true"></span>
-        <span class="btn__label">Create account</span>
+        <span class="btn__label" data-i18n="auth.register.submit">Create account</span>
       </button>
       <p class="note authform__switch">
-        Already have an account? <button type="button" class="linkbtn" id="toLogin">Sign in</button>
+        <span data-i18n="auth.register.haveAccount">Already have an account?</span> <button type="button" class="linkbtn" id="toLogin" data-i18n="auth.register.signinLink">Sign in</button>
       </p>
     </form>
 
     <!-- ── Two-factor ── -->
     <form class="authform" id="twoFactorForm" data-authview="twofactor" novalidate>
-      <h2 class="card__title">Enter your code</h2>
-      <p class="note">Open your authenticator app and enter the 6-digit code for this account.</p>
+      <h2 class="card__title" data-i18n="auth.twofactor.title">Enter your code</h2>
+      <p class="note" data-i18n="auth.twofactor.hint">Open your authenticator app and enter the 6-digit code for this account.</p>
       <div class="field">
-        <label class="fieldlabel" for="twoFactorCode">Authentication code</label>
+        <label class="fieldlabel" for="twoFactorCode" data-i18n="auth.twofactor.codeLabel">Authentication code</label>
         <input type="text" id="twoFactorCode" inputmode="numeric" pattern="[0-9]*"
                autocomplete="one-time-code" maxlength="6" required />
       </div>
       <p class="fielderr" id="twoFactorError" role="alert" hidden></p>
       <button type="submit" class="btn btn--primary" id="twoFactorSubmit">
         <span class="btn__spinner" aria-hidden="true"></span>
-        <span class="btn__label">Verify</span>
+        <span class="btn__label" data-i18n="auth.twofactor.submit">Verify</span>
       </button>
       <p class="note authform__switch">
-        <button type="button" class="linkbtn" id="cancelTwoFactor">Back to sign in</button>
+        <button type="button" class="linkbtn" id="cancelTwoFactor" data-i18n="auth.twofactor.back">Back to sign in</button>
       </p>
     </form>
   </div>
@@ -124,35 +126,93 @@
 
 <header class="masthead">
   <div class="masthead__mark" aria-hidden="true">
-    <!-- The signature motif: a segmentation mask cut out of a photo plane. -->
-    <svg viewBox="0 0 40 40" role="presentation">
-      <rect x="1.5" y="1.5" width="37" height="37" rx="3" class="mark-plate" />
-      <path d="M8 27c3-9 6-13 11-13s9 4 13 13z" class="mark-mask" />
-    </svg>
+    <!-- Moleraj's own mark. The PNG is solid black linework on a transparent
+         background, so it's used as a CSS mask (see .masthead__logo in
+         styles.css) with background-color: var(--mask) painted through it —
+         the mark is the theme's own accent green/lime, not a fixed colour,
+         and it sits transparently on the masthead with no backing plate. -->
+    <span class="masthead__logo"></span>
   </div>
   <div class="masthead__title">
     <h1>Maskwork</h1>
-    <p>Find the wall, or pick the regions yourself. Repaint only those pixels.</p>
+    <p data-i18n="masthead.subtitle">Find the wall, or pick the regions yourself. Repaint only those pixels.</p>
   </div>
+  <!-- Theme toggle: independent of body[data-state] and body.authed — a
+       display preference, not a step in the task flow. This one is hidden
+       along with the rest of .masthead while body isn't .authed (see
+       styles.css), which is why #authScreen has its own copy below
+       (#themeToggleAuth) for the signed-out screens. js/theme.js wires both
+       to the same html[data-theme] + localStorage and never touches
+       state.js's machine. -->
+  <button type="button" class="iconbtn iconbtn--theme masthead__theme" id="themeToggle"
+          aria-pressed="true" data-i18n-attr="title:common.themeToggle" title="Switch theme">
+    <span class="themeicon themeicon--sun" aria-hidden="true">☀</span>
+    <span class="themeicon themeicon--moon" aria-hidden="true">☾</span>
+  </button>
   <!-- Relocated from beside Download/Add surface, where it read as one more
        option in that group — a destructive, session-ending action doesn't
        belong in a row of editing actions. Living in the masthead instead,
        it's always reachable but visually a different kind of thing. -->
   <button type="button" class="btn btn--ghost masthead__reset" id="newImageBtn" hidden>
-    <span aria-hidden="true">↺</span> New photo
+    <span aria-hidden="true">↺</span> <span data-i18n="masthead.newPhoto">New photo</span>
   </button>
   <!-- "Signed in" is now a real, persistent state (a real account, not a
        token pasted for the session), so unlike the old placeholder there is
        something real to sign out of. -->
-  <button type="button" class="btn btn--ghost masthead__reset" id="logoutBtn" hidden>
+  <button type="button" class="btn btn--ghost masthead__reset" id="logoutBtn" hidden data-i18n="masthead.signOut">
     Sign out
   </button>
+  <!-- Hamburger: mobile only (see styles.css, hidden above 980px). Opens
+       #appSidebar — a shell for whatever gets added there next; today it
+       just re-exposes New photo/theme/Sign out in one place instead of
+       three separate crowded masthead buttons on a phone-width screen.
+       js/sidebar.js owns the open/close state (a plain --open flag on the
+       drawer), same standalone pattern as theme.js/edittabs.js: it doesn't
+       read or write body[data-state]/[data-ready]. -->
+  <button type="button" class="iconbtn masthead__hamburger" id="sidebarToggle"
+          aria-haspopup="true" aria-controls="appSidebar" aria-expanded="false"
+          data-i18n-attr="title:masthead.menu,aria-label:masthead.menu" title="Menu" aria-label="Menu">
+    <span class="hamburger" aria-hidden="true"><span></span><span></span><span></span></span>
+  </button>
 </header>
+
+<div class="sidebarbackdrop" id="sidebarBackdrop" hidden></div>
+<aside class="appsidebar" id="appSidebar" aria-hidden="true" aria-label="Menu">
+  <div class="appsidebar__head">
+    <div class="masthead__mark appsidebar__mark" aria-hidden="true">
+      <span class="masthead__logo"></span>
+    </div>
+    <div class="appsidebar__headtext">
+      <p class="appsidebar__title">Maskwork</p>
+      <p class="appsidebar__sub" data-i18n="masthead.menu">Menu</p>
+    </div>
+    <button type="button" class="iconbtn appsidebar__close" id="sidebarClose"
+            data-i18n-attr="aria-label:masthead.closeMenu" aria-label="Close menu">✕</button>
+  </div>
+
+  <nav class="appsidebar__nav">
+    <button type="button" class="appsidebar__item" id="sidebarNewPhoto">
+      <span aria-hidden="true">↺</span> <span data-i18n="masthead.newPhoto">New photo</span>
+    </button>
+    <button type="button" class="appsidebar__item iconbtn--theme" id="themeToggleSidebar"
+            aria-pressed="true">
+      <span class="themeicon themeicon--sun" aria-hidden="true">☀</span>
+      <span class="themeicon themeicon--moon" aria-hidden="true">☾</span>
+      <span data-i18n="common.themeToggle">Switch theme</span>
+    </button>
+  </nav>
+
+  <p class="appsidebar__note" data-i18n="masthead.moreTools">More tools land here as they ship.</p>
+
+  <button type="button" class="appsidebar__item appsidebar__item--danger" id="sidebarSignOut">
+    <span data-i18n="masthead.signOut">Sign out</span>
+  </button>
+</aside>
 
 <main class="workbench">
 
   <!-- ───────────────────────── STAGE ───────────────────────── -->
-  <section class="stage" aria-label="Image preview">
+  <section class="stage" aria-label="Image preview" data-i18n-attr="aria-label:stage.ariaLabel">
     <div class="well" id="well">
 
       <div class="well__empty" data-when="idle uploading error">
@@ -163,11 +223,11 @@
         <div id="taskPreviewWrap" hidden>
           <canvas id="taskPreviewCanvas" class="taskpreview" width="1" height="1"></canvas>
           <p class="well__emptyline" id="taskPreviewLabel">Wall (interior)</p>
-          <p class="well__emptyhint">Click "Open" in the panel to continue this session.</p>
+          <p class="well__emptyhint" data-i18n="well.resumeHint">Click "Open" in the panel to continue this session.</p>
         </div>
         <div id="emptyDefault">
-          <p class="well__emptyline">No image loaded</p>
-          <p class="well__emptyhint">Drop a photo into the panel and choose how the surface should be found.</p>
+          <p class="well__emptyline" data-i18n="well.emptyTitle">No image loaded</p>
+          <p class="well__emptyhint" data-i18n="well.emptyHint">Drop a photo into the panel and choose how the surface should be found.</p>
         </div>
       </div>
 
@@ -175,7 +235,7 @@
       <div class="ants" data-when="tracking" style="--d:grid" aria-hidden="true">
         <div class="ants__box"></div>
       </div>
-      <p class="well__working" data-when="tracking" id="wellWorking">Working…</p>
+      <p class="well__working" data-when="tracking" id="wellWorking" data-i18n="well.working">Working…</p>
 
       <!-- Ready · edit: the composited result, plus the before/after compare.
            #canvasZoomTarget is the zoom target (req 7) — scaled via CSS
@@ -186,43 +246,75 @@
         <div class="canvasinner" id="canvasZoomTarget">
           <canvas id="display" width="1" height="1"></canvas>
 
+          <!-- Brush & Eraser: draws live strokes here at preview scale for
+               instant feedback; committed to the active layer's actual mask
+               (full resolution) on pointerup — see js/brush.js. Only accepts
+               pointer events while the Mask tab is the active one, everywhere
+               else it's transparent to clicks (zoom, before/after, etc. keep
+               working normally on the other tabs). -->
+          <canvas id="maskDrawSurface" width="1" height="1" class="maskdraw"></canvas>
+
           <div class="comparebox" id="comparebox" hidden>
             <canvas id="beforeCanvas" width="1" height="1"></canvas>
             <div class="comparebox__line" aria-hidden="true"></div>
             <div class="comparebox__grip" aria-hidden="true">↔</div>
-            <span class="comparebox__tag comparebox__tag--before">Before</span>
-            <span class="comparebox__tag comparebox__tag--after">After</span>
+            <span class="comparebox__tag comparebox__tag--before" data-i18n="well.compareBefore">Before</span>
+            <span class="comparebox__tag comparebox__tag--after" data-i18n="well.compareAfter">After</span>
             <input type="range" id="compareSlider" min="0" max="100" value="50"
-                   aria-label="Drag to compare the photo before and after your edits" />
+                   data-i18n-attr="aria-label:well.compareSliderAria" aria-label="Drag to compare the photo before and after your edits" />
           </div>
         </div>
 
-        <button type="button" class="stagetoggle" id="compareToggle" aria-pressed="false">
+        <!-- Brush radius ring, follows the pointer while the Mask tab is
+             active — purely visual, never receives events itself. -->
+        <div class="brushcursor" id="brushCursor" aria-hidden="true" hidden></div>
+
+        <!-- Magnifier: an optional zoomed peek near the pointer while a
+             stroke is down (see edit.magnifierToggle) — most useful on
+             touch, where a fingertip otherwise hides the exact spot. -->
+        <div class="brushmag" id="brushMagnifier" aria-hidden="true" hidden>
+          <canvas id="brushMagnifierCanvas" width="120" height="120"></canvas>
+          <div class="brushmag__cross" aria-hidden="true"></div>
+        </div>
+
+        <button type="button" class="stagetoggle" id="compareToggle" aria-pressed="false" data-i18n="well.compareToggle">
           Before / After
         </button>
+
+        <!-- History: unlimited undo/redo over the edit controls (colour,
+             texture, hue/sat...) — see js/controls.js. Lives here rather than
+             in the rail because it acts on whichever surface is active, not
+             on any one tab, and this is the same "floating pill, fixed corner
+             regardless of zoom" treatment as compareToggle above. -->
+        <div class="stagetoolbar" id="stageToolbar">
+          <button type="button" class="iconbtn iconbtn--stage" id="undoBtn" disabled
+                  data-i18n-attr="title:edit.undo,aria-label:edit.undo" title="Undo" aria-label="Undo">↶</button>
+          <button type="button" class="iconbtn iconbtn--stage" id="redoBtn" disabled
+                  data-i18n-attr="title:edit.redo,aria-label:edit.redo" title="Redo" aria-label="Redo">↷</button>
+        </div>
       </div>
 
       <!-- Ready · select: the clickable label map -->
       <div class="pickerbox" id="pickerbox" data-when="ready" data-when-ready="select" style="--d:block">
         <canvas id="picker" width="1" height="1" tabindex="0"
                 role="application"
-                aria-label="Click a region of the photo to add it to the selection"></canvas>
+                data-i18n-attr="aria-label:well.pickerAriaLabel" aria-label="Click a region of the photo to add it to the selection"></canvas>
       </div>
 
       <!-- Zoom: shown for either face of ready. Wheel-zoom targets whichever
            face is currently showing; the buttons mirror that (req 7). -->
       <div class="zoomctrl" id="zoomControls" data-when="ready" style="--d:flex">
-        <button type="button" class="iconbtn iconbtn--zoom" id="zoomOut" aria-label="Zoom out">−</button>
-        <button type="button" class="zoomctrl__level" id="zoomLevel" title="Reset zoom">100%</button>
-        <button type="button" class="iconbtn iconbtn--zoom" id="zoomIn" aria-label="Zoom in">+</button>
+        <button type="button" class="iconbtn iconbtn--zoom" id="zoomOut" data-i18n-attr="aria-label:well.zoomOutAria" aria-label="Zoom out">−</button>
+        <button type="button" class="zoomctrl__level" id="zoomLevel" data-i18n-attr="title:well.zoomResetTitle" title="Reset zoom">100%</button>
+        <button type="button" class="iconbtn iconbtn--zoom" id="zoomIn" data-i18n-attr="aria-label:well.zoomInAria" aria-label="Zoom in">+</button>
       </div>
     </div>
 
     <p class="stage__foot" data-when="ready" data-when-ready="edit" style="--d:flex">
-      <span>Preview is downscaled for smooth dragging. Export renders at full resolution.</span>
+      <span data-i18n="stage.footEdit">Preview is downscaled for smooth dragging. Export renders at full resolution.</span>
     </p>
     <p class="stage__foot" data-when="ready" data-when-ready="select" style="--d:flex">
-      <span>Click a surface to add it. Click it again to drop it. Several regions can make up one wall.</span>
+      <span data-i18n="stage.footSelect">Click a surface to add it. Click it again to drop it. Several regions can make up one wall.</span>
     </p>
   </section>
 
@@ -233,85 +325,90 @@
     <form class="card" id="jobForm" data-when="idle uploading" style="--d:block" novalidate>
       <h2 class="card__title">
         <span class="card__step">01</span>
-        Load a photo
+        <span data-i18n="jobForm.step1Title">Load a photo</span>
       </h2>
 
       <div class="drop" id="drop" tabindex="0" role="button"
-           aria-describedby="fileHint" aria-label="Choose an image, or drop one here">
+           aria-describedby="fileHint" data-i18n-attr="aria-label:jobForm.dropAriaLabel" aria-label="Choose an image, or drop one here">
         <input type="file" id="file" accept="image/png,image/jpeg,image/webp" hidden />
         <div class="drop__body" id="dropBody">
           <span class="drop__icon" aria-hidden="true">
             <svg viewBox="0 0 24 24"><path d="M3 16.5V19a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-2.5M12 3v13m0-13 5 5m-5-5-5 5"/></svg>
           </span>
-          <span class="drop__label">Choose an image or drop it here</span>
-          <span class="drop__meta" id="fileHint">PNG, JPEG or WebP · up to 10 MB</span>
+          <span class="drop__label" data-i18n="jobForm.dropLabel">Choose an image or drop it here</span>
+          <span class="drop__meta" id="fileHint" data-i18n="jobForm.dropMeta">PNG, JPEG or WebP · up to 10 MB</span>
         </div>
         <div class="drop__file" id="dropFile" hidden>
           <img alt="" id="thumb" />
           <span class="drop__filename" id="fileName"></span>
           <span class="drop__filesize" id="fileSize"></span>
-          <button type="button" class="linkbtn" id="clearFile">Change</button>
+          <button type="button" class="linkbtn" id="clearFile" data-i18n="jobForm.change">Change</button>
         </div>
       </div>
       <p class="fielderr" id="fileError" role="alert" hidden></p>
 
       <h2 class="card__title card__title--tight">
         <span class="card__step">02</span>
-        How should the surface be found?
+        <span data-i18n="jobForm.step2Title">How should the surface be found?</span>
       </h2>
 
-      <div class="ops" id="operationChoice" role="radiogroup" aria-label="Operation">
+      <div class="ops" id="operationChoice" role="radiogroup" data-i18n-attr="aria-label:jobForm.operationAriaLabel" aria-label="Operation">
         <label class="op">
           <input type="radio" name="operation" value="Segment" id="opSegment" checked />
           <span class="op__body">
-            <span class="op__name">Find the wall</span>
-            <span class="op__desc">A fixed model looks for wall surfaces on its own. Nothing to click.</span>
+            <span class="op__name" data-i18n="jobForm.opSegmentName">Find the wall</span>
+            <span class="op__desc" data-i18n="jobForm.opSegmentDesc">A fixed model looks for wall surfaces on its own. Nothing to click.</span>
           </span>
         </label>
         <label class="op">
           <input type="radio" name="operation" value="Regions" id="opRegions" />
           <span class="op__body">
-            <span class="op__name">Pick regions myself</span>
-            <span class="op__desc">The photo is split into regions. You click the ones that make up the surface, and save the set.</span>
+            <span class="op__name" data-i18n="jobForm.opRegionsName">Pick regions myself</span>
+            <span class="op__desc" data-i18n="jobForm.opRegionsDesc">The photo is split into regions. You click the ones that make up the surface, and save the set.</span>
           </span>
         </label>
       </div>
 
       <!-- Only Segment reads mode; the server ignores it for Regions. -->
       <div class="field field--mode" id="modeField">
-        <span class="fieldlabel" id="modeLabel">Which side of the wall?</span>
+        <span class="control__label">
+          <span class="fieldlabel" id="modeLabel" data-i18n="jobForm.modeLabel">Which side of the wall?</span>
+          <span class="infotip">
+            <button type="button" class="infotip__icon" data-i18n-attr="aria-label:common.moreInfo" aria-label="More info"></button>
+            <span class="infotip__bubble" role="tooltip" data-i18n="jobForm.modeHint">Interior for rooms, exterior for facades. The model is trained differently for each.</span>
+          </span>
+        </span>
         <div class="segmented" id="modeChoice" role="radiogroup" aria-labelledby="modeLabel"></div>
-        <p class="hint">Interior for rooms, exterior for facades. The model is trained differently for each.</p>
       </div>
       <p class="fielderr" id="jobError" role="alert" hidden></p>
 
       <button type="submit" class="btn btn--primary" id="submitBtn" disabled>
         <span class="btn__spinner" aria-hidden="true"></span>
-        <span class="btn__label">Start</span>
+        <span class="btn__label" data-i18n="jobForm.submit">Start</span>
       </button>
 
-      <p class="note" id="reuseNote" hidden>
+      <p class="note" id="reuseNote" hidden data-i18n="jobForm.reuseNote">
         Using the photo already loaded — no re-upload.
       </p>
-      <p class="note">
+      <p class="note" data-i18n="jobForm.sizeNote">
         Size and type are checked here for speed. The server checks again, and its answer is the one that counts.
       </p>
 
       <div class="resume">
-        <button type="button" class="linkbtn" id="resumeToggle" aria-expanded="false" aria-controls="resumePanel">
+        <button type="button" class="linkbtn" id="resumeToggle" aria-expanded="false" aria-controls="resumePanel" data-i18n="jobForm.resumeToggle">
           Resume an earlier session
         </button>
         <div class="resumepanel" id="resumePanel" hidden>
-          <p class="note" id="resumeNote">
+          <p class="note" id="resumeNote" data-i18n="jobForm.resumeNote">
             Opening a job here brings back the photo, the mask or regions, and every
             saved selection — no need to pick the photo again.
           </p>
           <div class="resume__head">
-            <span>Your recent jobs</span>
-            <button type="button" class="linkbtn" id="resumeRefresh">Refresh</button>
+            <span data-i18n="jobForm.resumeHeading">Your recent jobs</span>
+            <button type="button" class="linkbtn" id="resumeRefresh" data-i18n="jobForm.resumeRefresh">Refresh</button>
           </div>
           <ul class="tasklist" id="resumeList"></ul>
-          <p class="hint" id="resumeEmpty" hidden>Nothing here yet.</p>
+          <p class="hint" id="resumeEmpty" hidden data-i18n="jobForm.resumeEmpty">Nothing here yet.</p>
         </div>
       </div>
     </form>
@@ -320,43 +417,43 @@
     <section class="card" data-when="tracking" style="--d:block" aria-labelledby="pollTitle">
       <h2 class="card__title" id="pollTitle">
         <span class="card__step">03</span>
-        Working
+        <span data-i18n="tracking.title">Working</span>
       </h2>
 
-      <p class="statusline" id="statusLabel" role="status" aria-live="polite">Queued</p>
+      <p class="statusline" id="statusLabel" role="status" aria-live="polite" data-i18n="tracking.statusQueued">Queued</p>
 
       <ol class="steps" id="pollSteps" aria-hidden="true">
         <li class="step" data-state="Pending">
           <span class="step__dot"><span class="step__check">✓</span></span>
-          <span class="step__label">Queued</span>
+          <span class="step__label" data-i18n="tracking.stepQueued">Queued</span>
         </li>
         <li class="step" data-state="Preprocessing">
           <span class="step__dot"><span class="step__check">✓</span></span>
-          <span class="step__label">Reading photo</span>
+          <span class="step__label" data-i18n="tracking.stepReading">Reading photo</span>
         </li>
         <li class="step" data-state="Processing">
           <span class="step__dot"><span class="step__check">✓</span></span>
-          <span class="step__label" id="pollStepLastLabel">Finding surface</span>
+          <span class="step__label" id="pollStepLastLabel" data-i18n="tracking.stepFinding">Finding surface</span>
         </li>
       </ol>
-      <div class="track" role="img" aria-label="Working"><div class="track__fill" id="pollFill"></div></div>
+      <div class="track" role="img" data-i18n-attr="aria-label:tracking.workingAria" aria-label="Working"><div class="track__fill" id="pollFill"></div></div>
 
-      <p class="elapsedline" id="pollElapsedLine">Running for <span id="pollElapsed">0s</span></p>
+      <p class="elapsedline" id="pollElapsedLine"><span data-i18n="tracking.runningFor">Running for</span> <span id="pollElapsed">0s</span></p>
 
-      <p class="note note--warn" id="slowNote" hidden>
+      <p class="note note--warn" id="slowNote" hidden data-i18n="tracking.slowNote">
         Still going. Long queues and large photos both do this — the job is not lost.
       </p>
 
-      <button type="button" class="btn btn--quiet" id="cancelPoll">Stop waiting</button>
+      <button type="button" class="btn btn--quiet" id="cancelPoll" data-i18n="tracking.stopWaiting">Stop waiting</button>
     </section>
 
     <!-- ── Error ── -->
     <section class="card card--bad" data-when="error" style="--d:block" aria-labelledby="errTitle">
-      <h2 class="card__title" id="errTitle"><span id="errorTitle">Something went wrong</span></h2>
+      <h2 class="card__title" id="errTitle"><span id="errorTitle" data-i18n="error.title">Something went wrong</span></h2>
       <p class="errmsg" id="errorMessage" role="alert"></p>
       <div class="btnrow">
-        <button type="button" class="btn btn--primary" id="errPrimary">Try again</button>
-        <button type="button" class="btn btn--quiet" id="errSecondary" hidden>Start over</button>
+        <button type="button" class="btn btn--primary" id="errPrimary" data-i18n="error.tryAgain">Try again</button>
+        <button type="button" class="btn btn--quiet" id="errSecondary" hidden data-i18n="error.startOver">Start over</button>
       </div>
     </section>
 
@@ -365,10 +462,10 @@
              aria-labelledby="selTitle">
       <h2 class="card__title" id="selTitle">
         <span class="card__step">04</span>
-        Choose the surface
+        <span data-i18n="select.title">Choose the surface</span>
       </h2>
 
-      <p class="hint" id="selHint">
+      <p class="hint" id="selHint" data-i18n="select.hint">
         Click regions in the photo. A wall is often three or four of them — a lit part, a
         shaded part, the strip under a window.
       </p>
@@ -381,136 +478,225 @@
       <div class="chips" id="selChips" aria-live="polite"></div>
 
       <div class="field">
-        <label class="fieldlabel" for="groupName">Name this selection</label>
-        <input type="text" id="groupName" placeholder="Living room wall"
+        <label class="fieldlabel" for="groupName" data-i18n="select.nameLabel">Name this selection</label>
+        <input type="text" id="groupName" data-i18n-attr="placeholder:select.namePlaceholder" placeholder="Living room wall"
                autocomplete="off" maxlength="60" />
       </div>
       <p class="fielderr" id="groupError" role="alert" hidden></p>
 
       <p class="note" id="editingNote" hidden>
-        Editing a saved selection. Saving replaces it.
-        <button type="button" class="linkbtn" id="cancelGroupEdit">Start a new one</button>
+        <span data-i18n="select.editingNote">Editing a saved selection. Saving replaces it.</span>
+        <button type="button" class="linkbtn" id="cancelGroupEdit" data-i18n="select.startNew">Start a new one</button>
       </p>
 
       <div class="btnrow btnrow--stack">
-        <button type="button" class="btn btn--primary" id="useSelectionBtn" disabled>
+        <button type="button" class="btn btn--primary" id="useSelectionBtn" disabled data-i18n="select.useSelection">
           Edit these regions
         </button>
         <div class="btnrow">
           <button type="button" class="btn btn--quiet" id="saveGroupBtn" disabled>
             <span class="btn__spinner" aria-hidden="true"></span>
-            <span class="btn__label">Save selection</span>
+            <span class="btn__label" data-i18n="select.saveSelection">Save selection</span>
           </button>
-          <button type="button" class="btn btn--quiet" id="clearSelBtn" disabled>Clear</button>
+          <button type="button" class="btn btn--quiet" id="clearSelBtn" disabled data-i18n="select.clear">Clear</button>
         </div>
       </div>
 
-      <p class="note">
+      <p class="note" data-i18n="select.saveHint">
         Editing works straight away — saving is only about getting the selection back later.
       </p>
 
       <div class="groups">
-        <span class="layers__label">Saved selections</span>
+        <span class="layers__label" data-i18n="select.savedHeading">Saved selections</span>
         <ul class="grouplist" id="groupList"></ul>
-        <p class="hint" id="groupEmpty">None saved for this photo yet.</p>
+        <p class="hint" id="groupEmpty" data-i18n="select.savedEmpty">None saved for this photo yet.</p>
       </div>
 
       <div class="btnrow">
-        <button type="button" class="btn btn--quiet" id="toEditBtn" hidden>Back to editing</button>
+        <button type="button" class="btn btn--quiet" id="toEditBtn" hidden data-i18n="select.backToEdit">Back to editing</button>
       </div>
     </section>
 
     <!-- ── Ready · edit ── -->
-    <section class="card" data-when="ready" data-when-ready="edit" style="--d:block"
+    <!-- data-edittab groups the controls below into panels so a growing set of
+         tools (brush, feather, grow/shrink, blend, perspective warp...) has
+         somewhere to live without turning this into one long scroll. The same
+         attribute, and the same panels, drive two different presentations —
+         see .edittabbar / [data-edittab-panel] in styles.css:
+           - desktop: a horizontal tab row inside the card
+           - narrow screens: the card becomes a bottom sheet; data-sheetopen
+             (toggled by js/edittabs.js) controls whether it's collapsed to a
+             handle or expanded over the stage.
+         js/edittabs.js only ever sets these two attributes — it doesn't read
+         or write body[data-state]/[data-ready], so this is independent of the
+         task-flow state machine. -->
+    <section class="card editcard" data-when="ready" data-when-ready="edit" data-edittab="surfaces" style="--d:block"
              aria-labelledby="editTitle">
+      <div class="editcard__handle" id="editSheetHandle" aria-hidden="true"></div>
       <h2 class="card__title" id="editTitle">
         <span class="card__step">05</span>
-        Edit the surface
+        <span data-i18n="edit.title">Edit the surface</span>
       </h2>
 
-      <!-- Surfaces: always visible, even with one — this is where a surface
-           is created, chosen, and reordered, all above the colour/texture
-           controls and above Download. -->
-      <div class="surfaces">
-        <span class="layers__label">Surfaces</span>
-        <ul class="surfacelist" id="surfaceList" aria-label="Surfaces"></ul>
-        <button type="button" class="surfacerow surfacerow--add" id="addRegionBtn">
-          <span class="surfacerow__addicon" aria-hidden="true">+</span>
-          <span id="addRegionLabel">Add another surface</span>
-        </button>
+      <div class="edittabbar" id="editTabbar" role="tablist" aria-label="Editing tools">
+        <button type="button" class="edittab" data-edittab-btn="surfaces" role="tab" aria-selected="true" data-i18n="edit.tabSurfaces">Surfaces</button>
+        <button type="button" class="edittab" data-edittab-btn="color" role="tab" aria-selected="false" data-i18n="edit.tabColor">Colour</button>
+        <button type="button" class="edittab" data-edittab-btn="adjust" role="tab" aria-selected="false" data-i18n="edit.tabAdjust">Adjust</button>
+        <button type="button" class="edittab" data-edittab-btn="mask" role="tab" aria-selected="false" data-i18n="edit.tabMask">Mask</button>
       </div>
 
-      <div class="control">
-        <div class="control__head">
-          <label for="tint">Colour</label>
-          <button type="button" class="linkbtn" id="tintOff">Keep original</button>
+      <div class="edittabbody" id="editTabbody">
+
+        <!-- Surfaces: always visible, even with one — this is where a surface
+             is created, chosen, and reordered, all above the colour/texture
+             controls and above Download. -->
+        <div class="editpanel" data-edittab-panel="surfaces" role="tabpanel">
+          <div class="surfaces">
+            <span class="layers__label" data-i18n="edit.surfacesHeading">Surfaces</span>
+            <ul class="surfacelist" id="surfaceList" data-i18n-attr="aria-label:edit.surfacesHeading" aria-label="Surfaces"></ul>
+            <button type="button" class="surfacerow surfacerow--add" id="addRegionBtn">
+              <span class="surfacerow__addicon" aria-hidden="true">+</span>
+              <span id="addRegionLabel" data-i18n="edit.addSurface">Add another surface</span>
+            </button>
+          </div>
         </div>
-        <div class="swatches" id="swatches" role="group" aria-label="Preset colours"></div>
-        <div class="tintrow">
-          <input type="color" id="tint" value="#3f6f5b" aria-label="Custom colour" />
-          <span id="tintReadout">off</span>
+
+        <div class="editpanel" data-edittab-panel="color" role="tabpanel" hidden>
+          <div class="control control--first">
+            <div class="control__head">
+              <label for="tint" data-i18n="edit.colorLabel">Colour</label>
+              <button type="button" class="linkbtn" id="tintOff" data-i18n="edit.keepOriginal">Keep original</button>
+            </div>
+            <div class="swatches" id="swatches" role="group" data-i18n-attr="aria-label:edit.presetColorsAria" aria-label="Preset colours"></div>
+            <div class="tintrow">
+              <input type="color" id="tint" value="#3f6f5b" data-i18n-attr="aria-label:edit.customColorAria" aria-label="Custom colour" />
+              <span id="tintReadout">off</span>
+            </div>
+            <div class="control__head control__head--sub">
+              <span class="control__label">
+                <label for="tintStrength" data-i18n="edit.intensityLabel">Colour intensity</label>
+                <span class="infotip">
+                  <button type="button" class="infotip__icon" data-i18n-attr="aria-label:common.moreInfo" aria-label="More info"></button>
+                  <span class="infotip__bubble" role="tooltip" data-i18n="edit.intensityHint">Colour applies as a flat, full colour at 100%. Lower the intensity to blend it back toward the original.</span>
+                </span>
+              </span>
+              <output id="tintStrengthReadout">100%</output>
+            </div>
+            <input type="range" id="tintStrength" min="0" max="100" step="1" value="100" />
+          </div>
         </div>
-        <div class="control__head control__head--sub">
-          <label for="tintStrength">Colour intensity</label>
-          <output id="tintStrengthReadout">100%</output>
+
+        <div class="editpanel" data-edittab-panel="adjust" role="tabpanel" hidden>
+          <div class="control control--first">
+            <div class="control__head">
+              <label for="hue" data-i18n="edit.hueLabel">Hue shift</label>
+              <output id="hueReadout">0°</output>
+            </div>
+            <input type="range" id="hue" min="-180" max="180" step="1" value="0" />
+          </div>
+
+          <div class="control">
+            <div class="control__head">
+              <label for="sat" data-i18n="edit.satLabel">Saturation</label>
+              <output id="satReadout">100%</output>
+            </div>
+            <input type="range" id="sat" min="0" max="250" step="1" value="100" />
+          </div>
+
+          <div class="control">
+            <div class="control__head">
+              <label id="texLabel" data-i18n="edit.texLabel">Texture</label>
+              <output id="texReadout">none</output>
+            </div>
+            <div class="textures" id="textures" role="group" aria-labelledby="texLabel"></div>
+            <div class="control__head control__head--sub">
+              <label for="texStrength" data-i18n="edit.texStrengthLabel">Texture strength</label>
+              <output id="texStrengthReadout">70%</output>
+            </div>
+            <input type="range" id="texStrength" min="0" max="100" step="1" value="70" />
+            <div class="control__head control__head--sub">
+              <span class="control__label">
+                <label for="texRotation" data-i18n="edit.texRotationLabel">Texture rotation</label>
+                <span class="infotip">
+                  <button type="button" class="infotip__icon" data-i18n-attr="aria-label:common.moreInfo" aria-label="More info"></button>
+                  <span class="infotip__bubble" role="tooltip" data-i18n="edit.texRotationHint">Turn the tile to match the angle of the wall.</span>
+                </span>
+              </span>
+              <output id="texRotationReadout">0°</output>
+            </div>
+            <input type="range" id="texRotation" min="-180" max="180" step="1" value="0" />
+            <div class="control__head control__head--sub">
+              <span class="control__label">
+                <label for="texDepth" data-i18n="edit.texDepthLabel">Texture depth</label>
+                <span class="infotip">
+                  <button type="button" class="infotip__icon" data-i18n-attr="aria-label:common.moreInfo" aria-label="More info"></button>
+                  <span class="infotip__bubble" role="tooltip" data-i18n="edit.texDepthHint">One side closer, the other farther — for a wall photographed at an angle.</span>
+                </span>
+              </span>
+              <output id="texDepthReadout">0</output>
+            </div>
+            <input type="range" id="texDepth" min="-100" max="100" step="1" value="0" />
+          </div>
+
+          <div class="control control__toggles">
+            <label class="check">
+              <input type="checkbox" id="showMask" />
+              <span data-i18n="edit.showMaskEdge">Show the mask edge</span>
+            </label>
+            <button type="button" class="linkbtn" id="resetEdits" data-i18n="edit.resetSurface">Reset this surface</button>
+          </div>
         </div>
-        <input type="range" id="tintStrength" min="0" max="100" step="1" value="100" />
-        <p class="hint">Colour replaces the hue, keeps the shading. Intensity blends it back toward the original.</p>
+
+        <div class="editpanel" data-edittab-panel="mask" role="tabpanel" hidden>
+          <div class="control control--first">
+            <div class="control__head">
+              <span class="control__label">
+                <label id="brushModeLabel" data-i18n="edit.brushLabel">Brush &amp; Eraser</label>
+                <span class="infotip">
+                  <button type="button" class="infotip__icon" data-i18n-attr="aria-label:common.moreInfo" aria-label="More info"></button>
+                  <span class="infotip__bubble" role="tooltip" data-i18n="edit.brushHint">Draw straight on the photo to add to the mask, or erase to take away — fixes edges, corners, and spots the automatic selection missed.</span>
+                </span>
+              </span>
+            </div>
+            <div class="segmented" id="brushModeChoice" role="radiogroup" aria-labelledby="brushModeLabel">
+              <label>
+                <input type="radio" name="brushMode" value="brush" id="brushModeBrush" checked />
+                <span data-i18n="edit.brushModeBrush">Brush</span>
+              </label>
+              <label>
+                <input type="radio" name="brushMode" value="eraser" id="brushModeEraser" />
+                <span data-i18n="edit.brushModeEraser">Eraser</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="control">
+            <div class="control__head">
+              <label for="brushSize" data-i18n="edit.brushSizeLabel">Brush size</label>
+              <output id="brushSizeReadout">40px</output>
+            </div>
+            <input type="range" id="brushSize" min="4" max="160" step="1" value="40" />
+          </div>
+
+          <div class="control control__toggles">
+            <label class="check">
+              <input type="checkbox" id="brushMagnifierToggle" checked />
+              <span data-i18n="edit.magnifierToggle">Magnifier while drawing</span>
+            </label>
+            <span class="infotip">
+              <button type="button" class="infotip__icon" data-i18n-attr="aria-label:common.moreInfo" aria-label="More info"></button>
+              <span class="infotip__bubble" role="tooltip" data-i18n="edit.magnifierHint">Shows a zoomed-in peek near your finger or cursor while you draw — easier to land exactly on an edge, especially on a phone.</span>
+            </span>
+          </div>
+
+          <p class="hint" data-i18n="edit.brushDrawHint">Draw directly on the photo above to fine-tune the mask. Undo/redo (top-left of the photo) covers every stroke.</p>
+        </div>
       </div>
 
-      <div class="control">
-        <div class="control__head">
-          <label for="hue">Hue shift</label>
-          <output id="hueReadout">0°</output>
-        </div>
-        <input type="range" id="hue" min="-180" max="180" step="1" value="0" />
-      </div>
-
-      <div class="control">
-        <div class="control__head">
-          <label for="sat">Saturation</label>
-          <output id="satReadout">100%</output>
-        </div>
-        <input type="range" id="sat" min="0" max="250" step="1" value="100" />
-      </div>
-
-      <div class="control">
-        <div class="control__head">
-          <label id="texLabel">Texture</label>
-          <output id="texReadout">none</output>
-        </div>
-        <div class="textures" id="textures" role="group" aria-labelledby="texLabel"></div>
-        <div class="control__head control__head--sub">
-          <label for="texStrength">Texture strength</label>
-          <output id="texStrengthReadout">70%</output>
-        </div>
-        <input type="range" id="texStrength" min="0" max="100" step="1" value="70" />
-        <div class="control__head control__head--sub">
-          <label for="texRotation">Texture rotation</label>
-          <output id="texRotationReadout">0°</output>
-        </div>
-        <input type="range" id="texRotation" min="-180" max="180" step="1" value="0" />
-        <p class="hint">Turn the tile to match the angle of the wall.</p>
-        <div class="control__head control__head--sub">
-          <label for="texDepth">Texture depth</label>
-          <output id="texDepthReadout">0</output>
-        </div>
-        <input type="range" id="texDepth" min="-100" max="100" step="1" value="0" />
-        <p class="hint">One side closer, the other farther — for a wall photographed at an angle.</p>
-      </div>
-
-      <div class="control control__toggles">
-        <label class="check">
-          <input type="checkbox" id="showMask" />
-          <span>Show the mask edge</span>
-        </label>
-        <button type="button" class="linkbtn" id="resetEdits">Reset this surface</button>
-      </div>
-
-      <div class="btnrow btnrow--stack">
+      <div class="btnrow btnrow--stack editcard__export">
         <button type="button" class="btn btn--primary" id="exportBtn">
           <span class="btn__spinner" aria-hidden="true"></span>
-          <span class="btn__label">Download PNG</span>
+          <span class="btn__label" data-i18n="edit.download">Download PNG</span>
         </button>
       </div>
     </section>
@@ -519,6 +705,11 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
+<script type="module" src="js/i18n.js"></script>
+<script type="module" src="js/theme.js"></script>
+<script type="module" src="js/edittabs.js"></script>
+<script type="module" src="js/sidebar.js"></script>
+<script type="module" src="js/infotip.js"></script>
 <script type="module" src="js/app.js"></script>
 </body>
 </html>

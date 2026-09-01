@@ -12,9 +12,10 @@
  *   base            the original, at working scale
  *    └─ per layer:
  *        maskLayer  original pixels, clipped by the mask (destination-in)
- *        adjusted   maskLayer + hue/saturate filter, then optional tint
- *                   via the "color" blend (hue+sat from the swatch,
- *                   luminosity from the photo — so shadows survive)
+ *        adjusted   maskLayer + hue/saturate filter, then optional tint —
+ *                   a flat fill of the picked colour, alpha-blended in at
+ *                   tintStrength (source-over, not a luminosity-preserving
+ *                   blend: at strength 1 the masked area is that hex colour)
  *        texture    tiled pattern, clipped to the same mask, multiplied on
  *                   so the original shading still reads through
  *
@@ -785,14 +786,13 @@ export class Compositor {
       actx.filter = "none";
 
       if (tint && tintStrength > 0) {
-        // "color" takes hue+saturation from the source and luminosity from
-        // the backdrop, which is exactly what repainting a surface means:
-        // new colour, same light. A flat fill would erase every shadow.
-        // tintStrength rides on globalAlpha: at 1 the blend fully replaces
-        // hue/saturation, and below that the original colour shows through
-        // proportionally — a intensity control rather than an on/off switch.
+        // A literal, flat application of the picked colour — at strength 1
+        // the masked area *is* that hex colour, full stop, not a hue/sat
+        // blend that keeps the original's shading showing through it.
+        // tintStrength is the opacity control: below 1 it fades back toward
+        // the hue/sat-adjusted original via ordinary alpha compositing.
         actx.globalAlpha = tintStrength;
-        actx.globalCompositeOperation = "color";
+        actx.globalCompositeOperation = "source-over";
         actx.fillStyle = tint;
         actx.fillRect(0, 0, w, h);
         actx.globalAlpha = 1;

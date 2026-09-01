@@ -21,6 +21,7 @@
  */
 
 import { CONFIG } from "./config.js";
+import { t } from "./i18n.js";
 import {
   submitTask, pollStatus, fetchResult, fetchOriginal, newIdempotencyKey,
   listImages, listMaskGroups, createMaskGroup, updateMaskGroup, deleteMaskGroup,
@@ -31,6 +32,7 @@ import { createMachine, STATE } from "./state.js";
 import { Compositor, loadImageFromBlob, createLabelMap, isUnedited } from "./compositor.js";
 import { createRegionPicker } from "./regions.js";
 import { createControls } from "./controls.js";
+import { createBrushTool } from "./brush.js";
 
 /**
  * Fails loudly, in one place, rather than as a cryptic "Cannot read
@@ -124,10 +126,29 @@ const compositor = new Compositor($("display"), { beforeCanvas: $("beforeCanvas"
 const controls = createControls({
   compositor,
   onEdit: () => updateReadout(),
+  onHistoryChange: ({ canUndo, canRedo }) => {
+    $("undoBtn").disabled = !canUndo;
+    $("redoBtn").disabled = !canRedo;
+  },
 });
 const picker = createRegionPicker({
   canvas: $("picker"),
   onChange: onSelectionChange,
+});
+
+const brush = createBrushTool({
+  compositor,
+  getActiveLayerId: () => controls.activeId,
+  canvasBox: document.querySelector(".canvasbox"),
+  displayCanvas: $("display"),
+  drawCanvas: $("maskDrawSurface"),
+  cursorEl: $("brushCursor"),
+  magnifierEl: $("brushMagnifier"),
+  magnifierCanvas: $("brushMagnifierCanvas"),
+  onStrokeCommitted: () => {
+    controls.commitHistoryCheckpoint();
+    updateReadout();
+  },
 });
 
 /** Assigned in wire() — see wireZoom(). Needs to exist at module scope so
@@ -582,11 +603,11 @@ async function loadResult({ restoreGroups = false } = {}) {
   } catch (err) {
     if (err?.message === "MASK_TAINTED") {
       showError({
-        title: "The result cannot be read",
-        message: "The image downloaded, but the browser will not let this page read its pixels. The server needs to send CORS headers that allow this origin, on both the result response and the storage URL it redirects to.",
+        title: t("error.resultUnreadable.title"),
+        message: t("error.resultUnreadable.message"),
         detail: "SecurityError: tainted canvas",
-        primary: { label: "Try again", action: () => { machine.to(STATE.TRACKING); loadResult(); } },
-        secondary: { label: "New image", action: resetAll },
+        primary: { label: t("error.tryAgain"), action: () => { machine.to(STATE.TRACKING); loadResult(); } },
+        secondary: { label: t("error.newImage"), action: resetAll },
       });
       return;
     }
@@ -610,13 +631,12 @@ function adoptSegmentMask(maskImage) {
     compositor.removeLayer(layer.id);
     const other = CONFIG.SEGMENT_MODES.find((m) => m !== session.taskMode) ?? null;
     showError({
-      title: "No wall found",
-      message: `The ${session.taskMode ?? ""} model did not find a wall in this photo.${
-        other ? ` Photos of the other kind usually need the ${other} model.` : ""
-      }`,
+      title: t("error.noWallFound.title"),
+      message: t("error.noWallFound.message", { mode: session.taskMode ?? "" })
+        + (other ? t("error.noWallFound.otherHint", { other }) : ""),
       primary: other
         ? {
-            label: `Try ${other} instead`,
+            label: t("error.noWallFound.tryOtherInstead", { other }),
             action: () => {
               session.mode = other;
               syncJobInputs();
@@ -624,8 +644,8 @@ function adoptSegmentMask(maskImage) {
               handleSubmit();
             },
           }
-        : { label: "Try again", action: () => { backToForm({ reuseImage: true }); handleSubmit(); } },
-      secondary: { label: "Pick regions by hand", action: () => switchToRegions() },
+        : { label: t("error.tryAgain"), action: () => { backToForm({ reuseImage: true }); handleSubmit(); } },
+      secondary: { label: t("error.noWallFound.pickByHand"), action: () => switchToRegions() },
     });
     return;
   }
@@ -638,7 +658,7 @@ function adoptSegmentMask(maskImage) {
   controls.refresh();
   compositor.render();
   updateReadout();
-  toast(`${label} is ready to edit.`);
+  toast(t("select.readyToEdit", { label }));
 }
 
 /** Regions: the bytes are a label map, which is raw material, not a mask. */
@@ -650,10 +670,10 @@ async function adoptLabelMap(labelImage, { restoreGroups }) {
     // regions at all, so there is nothing to click. Retrying the same photo
     // is unlikely to help.
     showError({
-      title: "No regions came back",
-      message: "The model split this photo into nothing selectable. A larger or less blurry photo usually works better.",
-      primary: { label: "New image", action: resetAll },
-      secondary: { label: "Find the wall automatically", action: () => switchToSegment() },
+      title: t("error.noRegions.title"),
+      message: t("error.noRegions.message"),
+      primary: { label: t("error.newImage"), action: resetAll },
+      secondary: { label: t("error.noRegions.findAutomatically"), action: () => switchToSegment() },
     });
     return;
   }
@@ -676,12 +696,15 @@ async function adoptLabelMap(labelImage, { restoreGroups }) {
     controls.refresh();
     compositor.render();
     if (restoreGroups) {
-      toast(`${compositor.layers.length} saved selection${compositor.layers.length === 1 ? "" : "s"} restored.`);
+      toast(t("select.savedSelectionsRestored", {
+        count: compositor.layers.length,
+        plural: compositor.layers.length === 1 ? "" : "s",
+      }));
     }
   } else {
     setReadyFace("select");
     resetSelectionForm();
-    toast(`${map.regionCount} regions found. Click the ones that make up the surface.`);
+    toast(t("select.regionsFound", { count: map.regionCount }));
   }
   updateReadout();
 }
@@ -692,8 +715,8 @@ async function adoptLabelMap(labelImage, { restoreGroups }) {
 
 function onSelectionChange(selection) {
   const count = selection.size;
-  $("selCount").textContent = `${count} region${count === 1 ? "" : "s"}`;
-  $("selCoverage").textContent = `${(picker.coverage() * 100).toFixed(1)}% of frame`;
+  $("selCount").textContent = t("select.regionsCount", { count, plural: count === 1 ? "" : "s" });
+  $("selCoverage").textContent = t("select.coveragePercent", { percent: (picker.coverage() * 100).toFixed(1) });
 
   const chips = $("selChips");
   chips.innerHTML = "";
@@ -701,7 +724,7 @@ function onSelectionChange(selection) {
     const chip = document.createElement("button");
     chip.type = "button";
     chip.className = "chip";
-    chip.title = "Remove this region";
+    chip.title = t("select.removeRegionTitle");
     const x = document.createElement("span");
     x.className = "chip__x";
     x.textContent = "×";
@@ -866,13 +889,13 @@ function renderGroups() {
     const edit = document.createElement("button");
     edit.type = "button";
     edit.className = "chipbtn";
-    edit.textContent = "Open";
+    edit.textContent = t("common.open");
     edit.addEventListener("click", () => openGroup(group));
 
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "chipbtn chipbtn--danger";
-    remove.textContent = "Delete";
+    remove.textContent = t("common.delete");
     remove.addEventListener("click", () => removeGroup(group, remove));
 
     actions.append(edit, remove);
@@ -953,7 +976,7 @@ async function saveGroup() {
   await refreshGroups(); // also covers the "never clicked Edit these regions" case, via syncGroupLayers
   controls.refresh();
   compositor.render();
-  toast(`Saved “${name}”.`);
+  toast(t("select.savedGroup", { name }));
 }
 
 async function removeGroup(group, button) {
@@ -967,7 +990,7 @@ async function removeGroup(group, button) {
   // A layer built from this group stays where it is — deleting the saved
   // selection is about the server's copy, not about undoing an edit.
   await refreshGroups();
-  toast("Selection deleted.");
+  toast(t("select.selectionDeleted"));
 }
 
 /* ------------------------------------------------------------------ *
@@ -988,7 +1011,7 @@ async function refreshTaskList() {
     else {
       taskList = [];
       renderTaskList();
-      toast(api.message || "The job list could not be loaded.");
+      toast(api.message || t("error.jobListFailed"));
     }
   } finally {
     button.disabled = false;
@@ -1033,7 +1056,7 @@ function renderTaskList() {
     const open = document.createElement("button");
     open.type = "button";
     open.className = "btn btn--quiet";
-    open.textContent = "Open";
+    open.textContent = t("common.open");
     // Always enabled, and always a complete resume in one click — GET
     // /original returns the actual uploaded photo for any task, in any
     // state, so there's nothing left to wait on the person to provide.
@@ -1044,8 +1067,8 @@ function renderTaskList() {
     const del = document.createElement("button");
     del.type = "button";
     del.className = "btn btn--quiet linkbtn--danger taskitem__del";
-    del.textContent = "Delete";
-    del.setAttribute("aria-label", `Delete ${describeJob(task.operation, task.mode)}`);
+    del.textContent = t("common.delete");
+    del.setAttribute("aria-label", `${t("common.delete")} ${describeJob(task.operation, task.mode)}`);
     del.addEventListener("click", (event) => {
       event.stopPropagation();
       deleteTask(task, del);
@@ -1086,7 +1109,7 @@ async function deleteTask(task, button) {
       showAuth("login");
       return;
     }
-    toast(api.message || "Could not delete that job.");
+    toast(api.message || t("error.deleteJobFailed"));
     return;
   }
 
@@ -1097,7 +1120,7 @@ async function deleteTask(task, button) {
     session.lastOpenAttempt = null;
   }
   renderTaskList();
-  toast("Job deleted.");
+  toast(t("select.jobDeleted"));
 }
 
 /**
@@ -1204,7 +1227,7 @@ async function openTask(task) {
   machine.to(STATE.TRACKING, { requestId: task.requestId });
 
   if (task.state === TASK_STATES.COMPLETED) {
-    $("statusLabel").textContent = "Reopening the session";
+    $("statusLabel").textContent = t("tracking.reopeningSession");
     setTrackingStep(TASK_STATES.COMPLETED, task.operation);
     await loadResult({ restoreGroups: true });
   } else if (task.state === TASK_STATES.FAILED) {
@@ -1290,7 +1313,7 @@ function handleFailure(err, { during }) {
       setFieldError($("fileError"), api.detail || "The server rejected this file.");
       $("drop").classList.add("has-error");
       refreshSubmitState();
-      toast("The server rejected that upload.");
+      toast(t("error.uploadRejected"));
       return;
 
     case "auth":
@@ -1324,16 +1347,16 @@ function handleFailure(err, { during }) {
       const seconds = api.retryAfterSeconds ?? 30;
       const group = during === "group";
       showError({
-        title: "Too many requests",
+        title: t("error.rateLimited.title"),
         message: group
-          ? "Saving selections shares the same rate limit as uploading images, and it has run out. Nothing was lost — the selection is still here."
-          : "You have hit the rate limit. Submitting again unlocks automatically.",
-        primary: { label: `Wait ${seconds}s`, action: () => {} },
-        secondary: { label: "Start over", action: resetAll },
+          ? t("error.rateLimited.messageGroup")
+          : t("error.rateLimited.messageSubmit"),
+        primary: { label: t("error.rateLimited.wait", { seconds }), action: () => {} },
+        secondary: { label: t("error.startOver"), action: resetAll },
       });
       startCountdown(seconds, group
-        ? { label: "Back to the selection", action: backToWork }
-        : { label: "Submit again", action: resubmit });
+        ? { label: t("error.rateLimited.backToSelection"), action: backToWork }
+        : { label: t("error.rateLimited.submitAgain"), action: resubmit });
       return;
     }
 
@@ -1342,53 +1365,53 @@ function handleFailure(err, { during }) {
       // status reported Completed, but /result still says otherwise. The job
       // is fine, so the recovery is to ask again, not to resubmit.
       showError({
-        title: "The result is not ready yet",
-        message: "The job reports as finished, but its output has not landed in storage yet. This usually clears in a few seconds.",
+        title: t("error.notReady.title"),
+        message: t("error.notReady.message"),
         detail: api.detail,
-        primary: { label: "Check again", action: () => { machine.to(STATE.TRACKING); loadResult(); } },
-        secondary: { label: "Start over", action: resetAll },
+        primary: { label: t("error.notReady.checkAgain"), action: () => { machine.to(STATE.TRACKING); loadResult(); } },
+        secondary: { label: t("error.startOver"), action: resetAll },
       });
       return;
 
     case "not_found":
       showError({
-        title: during === "original" ? "That session no longer exists" : "That job is not available",
+        title: during === "original" ? t("error.notFound.titleSession") : t("error.notFound.titleJob"),
         message: during === "original"
           // /original's 404 is unambiguous by design (not owner-scoped), so
           // this can say something more definite than the groups/list case.
-          ? "The server has no record of this job anymore."
+          ? t("error.notFound.messageOriginal")
           : during === "group" || during === "list"
           // Groups and the task list answer "not yours" with 404 as well, on
           // purpose, so this genuinely cannot be narrowed down for the user.
-          ? "The server will not return this job for the current sign-in. It may have expired, or it may belong to a different account."
-          : "The server no longer has this job. Submitting the photo again creates a fresh one.",
+          ? t("error.notFound.messageScoped")
+          : t("error.notFound.messageGeneric"),
         primary: during === "original"
-          ? { label: "Back", action: () => { machine.to(STATE.IDLE); refreshTaskList(); } }
+          ? { label: t("error.notFound.back"), action: () => { machine.to(STATE.IDLE); refreshTaskList(); } }
           : during === "group" || during === "list"
-          ? { label: "Back", action: backToWork }
-          : { label: "Submit again", action: resubmit },
-        secondary: { label: "New image", action: resetAll },
+          ? { label: t("error.notFound.back"), action: backToWork }
+          : { label: t("error.rateLimited.submitAgain"), action: resubmit },
+        secondary: { label: t("error.newImage"), action: resetAll },
       });
       return;
 
     case "network":
       showError({
-        title: "No connection to the server",
+        title: t("error.noConnection.title"),
         message: during === "result"
-          ? "The job finished, but its output could not be downloaded. It is still on the server."
+          ? t("error.noConnection.messageResult")
           : during === "original"
-          ? "The photo could not be downloaded. The session is still on the server."
-          : "The request did not reach the server. Check the connection and try again.",
+          ? t("error.noConnection.messageOriginal")
+          : t("error.noConnection.messageGeneric"),
         detail: api.detail,
         primary: {
-          label: during === "result" ? "Download it again" : "Try again",
+          label: during === "result" ? t("error.noConnection.downloadAgain") : t("error.tryAgain"),
           action: during === "result"
             ? () => { machine.to(STATE.TRACKING); loadResult(); }
             : during === "original" && session.lastOpenAttempt
             ? () => openTask(session.lastOpenAttempt)
             : resubmit,
         },
-        secondary: { label: "Start over", action: resetAll },
+        secondary: { label: t("error.startOver"), action: resetAll },
       });
       return;
 
@@ -1398,11 +1421,11 @@ function handleFailure(err, { during }) {
 
     default:
       showError({
-        title: "The server had a problem",
-        message: api.message || "Something failed on the server side. Trying again often works.",
+        title: t("error.serverProblem.title"),
+        message: api.message || t("error.serverProblem.message"),
         detail: api.status ? `HTTP ${api.status}` : null,
-        primary: { label: "Try again", action: resubmit },
-        secondary: { label: "Start over", action: resetAll },
+        primary: { label: t("error.tryAgain"), action: resubmit },
+        secondary: { label: t("error.startOver"), action: resetAll },
       });
   }
 }
@@ -1413,31 +1436,31 @@ function handleFailure(err, { during }) {
 function showTaskFailed(errorMessage) {
   const readable = typeof errorMessage === "string" && /\s/.test(errorMessage.trim()) && errorMessage.length > 12;
   showError({
-    title: "The job failed",
+    title: t("error.jobFailed.title"),
     message: readable
       ? errorMessage
-      : `The server could not finish the ${describeJob(session.taskOperation, session.taskMode)} job for this photo.`,
+      : t("error.jobFailed.messageGeneric", { job: describeJob(session.taskOperation, session.taskMode) }),
     detail: readable ? null : errorMessage || null,
     primary: {
       // Fresh task: new RequestId, new Idempotency-Key, same photo and settings.
-      label: "Try again",
+      label: t("error.tryAgain"),
       action: () => { backToForm({ reuseImage: true }); handleSubmit(); },
     },
-    secondary: { label: "New image", action: resetAll },
+    secondary: { label: t("error.newImage"), action: resetAll },
   });
 }
 
 function showHardTimeout() {
   const minutes = Math.round(CONFIG.TRACKING_HARD_TIMEOUT_MS / 60000);
   showError({
-    title: "This is taking unusually long",
-    message: `No result after ${minutes} minutes. The job may still finish — waiting keeps checking, and stopping leaves it running on the server.`,
+    title: t("error.takingLong.title"),
+    message: t("error.takingLong.message", { minutes }),
     detail: session.requestId ? `Request ${session.requestId}` : null,
     primary: {
-      label: "Keep waiting",
+      label: t("error.takingLong.keepWaiting"),
       action: () => { machine.to(STATE.TRACKING); startTracking({ extend: true }); },
     },
-    secondary: { label: "Stop and start over", action: resetAll },
+    secondary: { label: t("error.takingLong.stopAndStartOver"), action: resetAll },
   });
 }
 
@@ -1767,9 +1790,9 @@ async function handleExport() {
     link.remove();
     // Give the download a tick to start before the URL disappears.
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
-    toast("PNG saved at full resolution.");
+    toast(t("edit.pngSaved"));
   } catch (err) {
-    toast(err?.message || "The export failed.");
+    toast(err?.message || t("error.exportFailed"));
   } finally {
     button.classList.remove("is-busy");
     button.disabled = false;
@@ -1809,9 +1832,17 @@ function buildModeChoice() {
       setFieldError($("jobError"), null);
       refreshSubmitState();
     });
-    label.append(input, document.createTextNode(mode[0].toUpperCase() + mode.slice(1)));
+    label.append(input, document.createTextNode(modeLabel(mode)));
     container.append(label);
   }
+}
+
+/** Falls back to a capitalized raw value for a mode that has no translation
+ *  entry yet, rather than showing the dotted key (which t() would return). */
+function modeLabel(mode) {
+  const key = `jobForm.mode.${mode}`;
+  const label = t(key);
+  return label === key ? mode.charAt(0).toUpperCase() + mode.slice(1) : label;
 }
 
 /** Push session values back into the controls — used when code, not the user,
@@ -1911,13 +1942,82 @@ function wireSelection() {
   $("clearSelBtn").addEventListener("click", resetSelectionForm);
   $("useSelectionBtn").addEventListener("click", () => {
     const layer = useSelection();
-    if (layer) toast(`“${layer.label}” is ready to edit.`);
+    if (layer) toast(t("select.readyToEdit", { label: `“${layer.label}”` }));
   });
   $("cancelGroupEdit").addEventListener("click", resetSelectionForm);
   $("toEditBtn").addEventListener("click", () => {
     setReadyFace("edit");
     controls.refresh();
     updateReadout();
+  });
+}
+
+function wireBrush() {
+  const modeInputs = document.querySelectorAll('input[name="brushMode"]');
+  for (const input of modeInputs) {
+    input.addEventListener("change", () => {
+      if (input.checked) brush.setMode(input.value);
+    });
+  }
+
+  const sizeInput = $("brushSize");
+  const sizeReadout = $("brushSizeReadout");
+  sizeInput.addEventListener("input", () => {
+    brush.setSize(sizeInput.value);
+    sizeReadout.textContent = `${sizeInput.value}px`;
+  });
+
+  $("brushMagnifierToggle").addEventListener("change", (event) => {
+    brush.setMagnifierEnabled(event.target.checked);
+  });
+  brush.setMagnifierEnabled($("brushMagnifierToggle").checked);
+
+  // The Mask tab's own draw surface only accepts pointer events while it's
+  // the active tab (see body[data-edittab] in styles.css) — this keeps the
+  // brush tool's own on/off flag (cursor ring, magnifier) in step with that,
+  // without brush.js needing to know anything about tabs at all.
+  // The bottom sheet auto-expands when a tab is picked (see js/edittabs.js),
+  // which is right for Colour/Adjust but wrong for Mask: the whole point is
+  // to then touch the photo, and an expanded sheet can cover it entirely on
+  // a phone. Collapse it the instant a stroke starts. No-op on desktop,
+  // where data-sheetopen has no visual effect.
+  $("maskDrawSurface").addEventListener("pointerdown", () => {
+    document.querySelector(".editcard")?.setAttribute("data-sheetopen", "false");
+  }, { capture: true });
+
+  const applyTabState = () => brush.setActive(document.body.dataset.edittab === "mask");
+  applyTabState();
+  new MutationObserver(applyTabState).observe(document.body, { attributes: true, attributeFilter: ["data-edittab"] });
+}
+
+function wireHistory() {
+  $("undoBtn").addEventListener("click", () => controls.undo());
+  $("redoBtn").addEventListener("click", () => controls.redo());
+
+  document.addEventListener("keydown", (event) => {
+    if (!(event.ctrlKey || event.metaKey)) return;
+    if (event.key !== "z" && event.key !== "Z" && event.key !== "y" && event.key !== "Y") return;
+    // Only while the edit panel is actually the thing on screen — this
+    // shortcut has no business firing over the job form, an email field, etc.
+    if (document.body.dataset.state !== "ready" || document.body.dataset.ready !== "edit") return;
+    const target = event.target;
+    const textInputTypes = new Set(["text", "email", "password", "search", "tel", "url", "number"]);
+    const typing = target instanceof HTMLElement
+      && (target.tagName === "TEXTAREA"
+        || target.isContentEditable
+        || (target.tagName === "INPUT" && textInputTypes.has(target.type)));
+    if (typing) return;
+
+    if ((event.key === "z" || event.key === "Z") && event.shiftKey) {
+      event.preventDefault();
+      controls.redo();
+    } else if (event.key === "z" || event.key === "Z") {
+      event.preventDefault();
+      controls.undo();
+    } else if (event.key === "y" || event.key === "Y") {
+      event.preventDefault();
+      controls.redo();
+    }
   });
 }
 
@@ -2036,15 +2136,17 @@ function wire() {
   wireSelection();
   wireCompare();
   wireAuth();
+  wireHistory();
+  wireBrush();
   zoomCtl = wireZoom();
 
   $("cancelPoll").addEventListener("click", () => {
     stopTracking();
     showError({
-      title: "Stopped waiting",
-      message: "The job is still running on the server. Checking again picks it back up.",
-      primary: { label: "Check again", action: () => { machine.to(STATE.TRACKING); startTracking(); } },
-      secondary: { label: "Start over", action: resetAll },
+      title: t("error.stoppedWaiting.title"),
+      message: t("error.stoppedWaiting.message"),
+      primary: { label: t("error.notReady.checkAgain"), action: () => { machine.to(STATE.TRACKING); startTracking(); } },
+      secondary: { label: t("error.startOver"), action: resetAll },
     });
   });
 

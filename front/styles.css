@@ -26,9 +26,17 @@
   --surround:   #f3efe4;
   --surround-2: #e9e2cf;
   --paper:      #fffefb;
-  --well:       #1c231c;
+  --well:       #1c231c;   /* always-dark: the canvas well AND any decorative
+                               fill (toast, skip-link) that must stay a dark
+                               chip regardless of theme — never used for body text */
   --line:       #e3dcc8;
   --line-soft:  #ece6d6;
+  --line-hover: #b9c9b4;   /* hover border on .op / .taskitem / .groupitem rows */
+  --dash-line:  #c9c0a3;   /* dashed borders: dropzone, "add another surface" */
+  --glass-rgb:  255,254,251;  /* translucent card backgrounds (masthead, auth) */
+  --bg-glow-1:  #faf7ec;   /* body background's top-left radial highlight */
+  --bad-soft-bg:     #fdf7f5;
+  --bad-soft-border: #e8c3bd;
 
   /* ink */
   --ink:        #212b1f;
@@ -36,7 +44,7 @@
   --muted:      #83886f;
   --on-well:    #eef0e6;
 
-  /* signal — one accent, sage/forest green */
+  /* signal — sage/forest green accent, teal info, warm warn/bad */
   --mask:       #3f6b4a;
   --mask-ink:   #2c4d35;
   --mask-wash:  rgba(63, 107, 74, 0.10);
@@ -49,21 +57,100 @@
   /* type — no monospace anywhere: --mono is kept as an alias only so nothing
      that still references it (a direct rule, not just the .mono class) goes
      unstyled; every one of those spots renders in the site's own sans now. */
-  --display: "Bricolage Grotesque", "Trebuchet MS", system-ui, sans-serif;
+  --display: "Space Grotesk", "Trebuchet MS", system-ui, sans-serif;
   --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: var(--sans);
 
   /* metrics */
   --rail: 384px;
   --gap: 22px;
-  --r: 18px;             /* cards */
-  --r-sm: 12px;          /* controls, chips */
-  --r-pill: 999px;       /* buttons */
+  --r: 24px;             /* cards — was 18px; the rounder, "app-like" scale */
+  --r-lg: 32px;           /* hero surfaces: masthead, workbench shell, the well */
+  --r-sm: 14px;           /* controls, chips — was 12px */
+  --r-pill: 999px;        /* buttons */
   --shadow: 0 1px 1px rgba(33,43,31,.03), 0 14px 32px -20px rgba(33,43,31,.35);
   --shadow-lift: 0 6px 16px -8px rgba(33,43,31,.28);
+  /* deeper, softer elevation for "glass" cards — two stacked shadows read as
+     more lifted than one, without needing to darken the shadow color itself */
+  --shadow-glass: 0 1px 0 rgba(255,255,255,.6) inset, 0 1px 2px rgba(33,43,31,.04),
+                  0 24px 48px -28px rgba(33,43,31,.32);
+  --glass-line: rgba(255,255,255,.5);   /* inner top-edge highlight on glass cards */
+
+  /* gradient tiles — icon/step badges borrow the mockup's colourful-square
+     language, built from tones already in the palette rather than new hues */
+  --tile-mask:  linear-gradient(150deg, #4d7c58 0%, var(--mask) 55%, var(--mask-ink) 100%);
+  --tile-ink:   linear-gradient(150deg, #333f30 0%, var(--well) 65%, #10140f 100%);
+  --tile-info:  linear-gradient(150deg, #5187a3 0%, var(--info) 60%, #2c5361 100%);
+  --on-tile-mask: #fff;   /* text/icon colour on --tile-mask and the primary button */
+}
+
+/* ============================ dark theme ============================
+   Every value below overrides the light-theme block above; nothing else in
+   this file references a hex colour directly for anything that should flip
+   between themes (surfaces, ink, borders, shadows, glass) — it's all one of
+   these variables. .well/.on-well/checkerboard etc. stay as-is on purpose:
+   the canvas well is always a dark stage in both themes, so nothing there
+   needs to flip. (The logo mark used to be pinned to a fixed light plate for
+   the same reason, back when it was a plain black image — now that it's a
+   CSS-masked, theme-coloured icon, its plate is just var(--paper) like any
+   other card surface.) Palette taken from the Maskwork dark-theme
+   prototype: near-black ground, lime/emerald signal colour, cyan for
+   secondary metrics. */
+html[data-theme="dark"] {
+  --surround:   #0a0d0b;
+  --surround-2: #0e130f;
+  --paper:      #121812;
+  --well:       #0a0d0b;
+  --line:       rgba(255,255,255,.10);
+  --line-soft:  rgba(255,255,255,.07);
+  --line-hover: rgba(163,230,53,.35);
+  --dash-line:  rgba(163,230,53,.30);
+  --glass-rgb:  17,24,19;
+  --bg-glow-1:  #142016;
+  --bad-soft-bg:     #1c1210;
+  --bad-soft-border: #5c2b2e;
+
+  --ink:        #eef3ec;
+  --ink-2:      #b7c4ba;
+  --muted:      #7e8f82;
+  --on-well:    #eef3ec;
+
+  --mask:       #a3e635;
+  --mask-ink:   #d9f99d;
+  --mask-wash:  rgba(163, 230, 53, 0.12);
+  --mask-soft:  rgba(163, 230, 53, 0.16);
+  --info:       #67e8f9;
+  --warn:       #f4c069;
+  --bad:        #ff8a80;
+  --bad-wash:   rgba(255, 138, 128, 0.10);
+
+  --shadow: 0 1px 0 rgba(255,255,255,.03), 0 14px 32px -18px rgba(0,0,0,.7);
+  --shadow-lift: 0 6px 20px -6px rgba(163,230,53,.22), 0 4px 14px -6px rgba(0,0,0,.6);
+  --shadow-glass: 0 1px 0 rgba(255,255,255,.05) inset, 0 24px 48px -24px rgba(0,0,0,.75),
+                  0 0 40px -12px rgba(34,197,94,.14);
+  --glass-line: rgba(163,230,53,.16);
+
+  --tile-mask:  linear-gradient(150deg, #bef264 0%, var(--mask) 55%, #4ade80 100%);
+  --tile-ink:   linear-gradient(150deg, #1c261d 0%, var(--well) 65%, #050705 100%);
+  --tile-info:  linear-gradient(150deg, #67e8f9 0%, #22d3ee 60%, #0e7490 100%);
+  --on-tile-mask: #08110a;
 }
 
 * { box-sizing: border-box; }
+
+/* Buttons/inputs/selects/textareas don't inherit color or font from the page
+   by default in any browser — the UA stylesheet gives them the system
+   "buttontext" color and a system font instead. That's invisible in a
+   cream-on-black-text light theme (system buttontext just happens to be
+   black), but it means anything that never set its own explicit color —
+   .surfacerow__select, .zoomctrl__level, .taskitem__main, and any future
+   toolbar button — renders literally black-on-dark once dark mode exists.
+   Lowest possible specificity, so every existing .btn/.iconbtn/etc rule
+   that already sets its own color keeps winning exactly as before. */
+button, input, select, textarea {
+  color: inherit;
+  font: inherit;
+}
 
 html, body { height: 100%; }
 
@@ -74,7 +161,8 @@ body {
   line-height: 1.5;
   color: var(--ink);
   background:
-    radial-gradient(1200px 480px at 12% -10%, #faf7ec 0%, transparent 60%),
+    radial-gradient(1100px 520px at 14% -8%, var(--bg-glow-1) 0%, transparent 58%),
+    radial-gradient(900px 480px at 88% 8%, var(--mask-wash) 0%, transparent 55%),
     var(--surround);
   display: grid;
   grid-template-rows: auto 1fr;   /* masthead, workbench — no footer row */
@@ -131,13 +219,14 @@ body:not(.authed) .workbench { display: none !important; }
 
 .skip {
   position: absolute; left: -9999px; top: 0; z-index: 20;
-  background: var(--ink); color: var(--paper); padding: 10px 16px;
+  background: var(--well); color: var(--on-well); padding: 10px 16px;
   border-radius: 0 0 var(--r-sm) 0;
 }
 .skip:focus { left: 8px; top: 8px; border-radius: var(--r-sm); }
 
 /* ---------- auth screens ---------- */
 .authwrap {
+  position: relative;
   width: 100%;
   min-height: 100%;
   display: flex;
@@ -145,15 +234,18 @@ body:not(.authed) .workbench { display: none !important; }
   justify-content: center;
   padding: 32px 20px;
 }
+.authwrap__theme { position: absolute; top: 20px; right: 20px; z-index: 5; }
 .authcard {
   width: 100%;
   max-width: 380px;
-  background: var(--paper);
-  border-radius: var(--r);
-  box-shadow: var(--shadow);
-  padding: 28px 26px 24px;
+  background: rgba(var(--glass-rgb), .92);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--glass-line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-glass);
+  padding: 30px 28px 26px;
 }
-.authcard__mark { width: 40px; height: 40px; margin: 0 0 16px; }
+.authcard__mark { margin: 0 0 16px; }
 .authform { display: none; flex-direction: column; gap: 14px; }
 #authScreen[data-view="login"] .authform[data-authview="login"],
 #authScreen[data-view="register"] .authform[data-authview="register"],
@@ -170,22 +262,36 @@ body:not(.authed) .workbench { display: none !important; }
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 16px 26px;
-  border-bottom: 1px solid var(--line);
-  background: rgba(255, 254, 251, .82);
-  backdrop-filter: blur(8px);
+  margin: 14px 26px 0;
+  padding: 16px 22px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--glass-line);
+  background: rgba(var(--glass-rgb), .86);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-glass);
+  position: relative;
+  z-index: 2;
 }
 
 .masthead__mark {
   flex: none;
-  width: 40px; height: 40px;
+  height: 44px;
   display: grid; place-items: center;
-  background: var(--ink);
-  border-radius: 12px;
 }
-.masthead__mark svg { width: 24px; height: 24px; display: block; }
-.mark-plate { fill: none; stroke: none; }
-.mark-mask  { fill: #b9d4b9; }
+.masthead__logo {
+  display: block;
+  height: 34px;
+  aspect-ratio: 1102 / 800;   /* the source PNG's own proportions */
+  background-color: var(--mask);
+  -webkit-mask-image: url("assets/logo-moleraj.png");
+  mask-image: url("assets/logo-moleraj.png");
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
 
 .masthead__title {
   /* Takes exactly what's left between the icon and the button — not
@@ -233,10 +339,10 @@ body:not(.authed) .workbench { display: none !important; }
   min-height: 420px;
   padding: 22px;
   background:
-    radial-gradient(120% 140% at 50% -10%, #2a332a 0%, var(--well) 55%);
+    radial-gradient(130% 150% at 50% -10%, #2f3a2e 0%, var(--well) 52%, #141810 100%);
   border: 1px solid #10140f;
-  border-radius: var(--r);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.05), var(--shadow);
+  border-radius: var(--r-lg);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.06), var(--shadow-glass);
   overflow: hidden;
 }
 /* Every child occupies the same cell, so the canvas, the empty state and the
@@ -257,7 +363,7 @@ body:not(.authed) .workbench { display: none !important; }
    .canvasbox on purpose: .stagetoggle is a sibling of this, not a child, so
    scaling this via transform never scales the button along with the photo —
    it stays put at a fixed size in the corner regardless of zoom level. */
-.canvasinner { display: inline-block; line-height: 0; transform-origin: 50% 50%; }
+.canvasinner { position: relative; display: inline-block; line-height: 0; transform-origin: 50% 50%; }
 #display {
   display: block;
   max-width: 100%;
@@ -272,6 +378,58 @@ body:not(.authed) .workbench { display: none !important; }
     linear-gradient(-45deg, transparent 75%, #232b23 75%);
   background-size: 16px 16px;
   background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}
+
+/* ============================ brush & eraser ============================ */
+/* Sits exactly over #display (same trick as .comparebox — a sibling filling
+   the same shrink-wrapped box) but ignores pointer events everywhere except
+   while the Mask tab is the active one, so the other tabs' zoom/pan/compare
+   interactions are never blocked by an invisible drawing layer. See
+   js/edittabs.js (mirrors the active tab onto body[data-edittab]) and
+   js/brush.js (does the actual drawing). */
+.maskdraw {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 10px;
+  cursor: none;             /* replaced by .brushcursor, see below */
+  touch-action: none;       /* the stroke itself owns touch gestures here */
+  pointer-events: none;
+}
+body[data-edittab="mask"] .maskdraw { pointer-events: auto; }
+
+.brushcursor {
+  position: absolute;
+  z-index: 7;
+  width: 40px; height: 40px;
+  margin-left: -20px; margin-top: -20px;
+  border-radius: 50%;
+  border: 1.5px solid var(--on-well);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.5), inset 0 0 0 1px rgba(0,0,0,.5);
+  pointer-events: none;
+}
+.brushcursor--eraser { border-color: var(--bad); box-shadow: 0 0 0 1px rgba(0,0,0,.5), inset 0 0 0 1px rgba(0,0,0,.5); }
+
+.brushmag {
+  position: absolute;
+  z-index: 8;
+  width: 120px; height: 120px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid var(--on-well);
+  box-shadow: 0 12px 28px -10px rgba(0,0,0,.7);
+  pointer-events: none;
+  background: var(--well);
+}
+.brushmag canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+.brushmag__cross {
+  position: absolute; top: 50%; left: 50%;
+  width: 14px; height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  border: 1.5px solid var(--mask);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.6);
 }
 
 /* the wait indicator — a soft, breathing frame + shimmer sweep, plus a
@@ -383,8 +541,32 @@ body:not(.authed) .workbench { display: none !important; }
   transition: background .12s ease, border-color .12s ease;
 }
 .stagetoggle:hover { border-color: rgba(255,255,255,.4); }
-.stagetoggle[aria-pressed="true"] { background: var(--mask); border-color: var(--mask); color: #fff; }
+.stagetoggle[aria-pressed="true"] { background: var(--mask); border-color: var(--mask); color: var(--on-tile-mask); }
 .stagetoggle:focus-visible { outline: 2px solid var(--mask); outline-offset: 2px; }
+
+/* ============================ stage toolbar (undo/redo) ============================ */
+.stagetoolbar {
+  position: absolute;
+  top: 12px; left: 12px;
+  z-index: 6;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--r-pill);
+  background: rgba(20, 26, 20, .68);
+  border: 1px solid rgba(255,255,255,.15);
+  backdrop-filter: blur(4px);
+}
+.iconbtn.iconbtn--stage {
+  width: 30px; height: 30px;
+  border: 0;
+  background: transparent;
+  color: var(--on-well);
+  font-size: 15px;
+  border-radius: 50%;
+}
+.iconbtn.iconbtn--stage:hover:not(:disabled) { background: rgba(255,255,255,.14); color: var(--on-well); border-color: transparent; }
+.iconbtn.iconbtn--stage:disabled { opacity: .35; cursor: not-allowed; }
 
 .comparebox {
   position: absolute;
@@ -455,6 +637,28 @@ body:not(.authed) .workbench { display: none !important; }
   appearance: none;
 }
 
+/* ============================ theme toggle ============================ */
+.iconbtn--theme {
+  flex: none;
+  width: 42px; height: 42px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink-2);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  transition: border-color .12s ease, color .12s ease, box-shadow .12s ease, transform .12s ease;
+}
+.iconbtn--theme:hover { border-color: var(--mask); color: var(--mask-ink); }
+.iconbtn--theme:active { transform: translateY(1px); }
+.iconbtn--theme:focus-visible { outline: 2px solid var(--mask); outline-offset: 2px; }
+.themeicon { display: none; }
+html[data-theme="light"] .themeicon--sun { display: block; }
+html[data-theme="dark"]  .themeicon--moon { display: block; }
+
 /* ============================ masthead: new photo ============================ */
 .btn--ghost {
   background: transparent;
@@ -479,6 +683,92 @@ body:not(.authed) .workbench { display: none !important; }
   text-overflow: ellipsis;
 }
 
+/* ============================ hamburger + sidebar ============================ */
+/* Hidden by default; shown only ≤980px in the responsive section below —
+   desktop has room for New photo/theme/Sign out inline and doesn't need it. */
+.iconbtn.masthead__hamburger {
+  display: none; flex: none;
+  width: 42px; height: 42px;
+  border-radius: 50%;
+  box-shadow: var(--shadow);
+}
+.hamburger { display: grid; gap: 4px; width: 16px; }
+.hamburger span {
+  display: block; height: 2px; width: 100%;
+  background: currentColor; border-radius: 2px;
+}
+
+.sidebarbackdrop {
+  position: fixed; inset: 0;
+  z-index: 34;
+  background: rgba(8, 10, 8, .5);
+}
+
+.appsidebar {
+  position: fixed;
+  top: 0; bottom: 0; left: 0;
+  z-index: 35;
+  width: min(320px, 84vw);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 18px 16px calc(18px + env(safe-area-inset-bottom, 0px));
+  background: var(--paper);
+  box-shadow: var(--shadow-glass);
+  border-right: 1px solid var(--glass-line);
+  overflow-y: auto;
+  transform: translateX(-100%);
+  transition: transform .26s cubic-bezier(.32,.72,.28,1);
+}
+.appsidebar.is-open { transform: translateX(0); }
+/* Both the drawer and its trigger live inside the signed-in app; hidden
+   along with the rest of .masthead while body isn't .authed, same reasoning
+   as the masthead itself (see the auth-gating rule further down). */
+body:not(.authed) .appsidebar,
+body:not(.authed) .sidebarbackdrop { display: none !important; }
+
+.appsidebar__head { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+.appsidebar__mark { height: 36px; }
+.appsidebar__mark .masthead__logo { height: 26px; }
+.appsidebar__headtext { flex: 1; min-width: 0; }
+.appsidebar__title { margin: 0; font-family: var(--display); font-weight: 700; font-size: 16px; color: var(--ink); }
+.appsidebar__sub { margin: 1px 0 0; font-size: 11.5px; color: var(--muted); }
+.appsidebar__close {
+  flex: none; width: 34px; height: 34px;
+  border-radius: 50%; border: 1px solid var(--line);
+  background: var(--paper); color: var(--ink-2);
+  font-size: 13px; cursor: pointer;
+}
+.appsidebar__close:hover { border-color: var(--mask); color: var(--mask-ink); }
+
+.appsidebar__nav { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
+.appsidebar__item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; height: 46px; padding: 0 14px;
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  background: var(--paper); color: var(--ink);
+  font: inherit; font-size: 14px; font-weight: 600;
+  cursor: pointer; text-align: left;
+  transition: border-color .12s ease, background .12s ease, color .12s ease;
+}
+.appsidebar__item .themeicon { font-size: 15px; }
+.appsidebar__item:hover { border-color: var(--mask); color: var(--mask-ink); }
+.appsidebar__item--danger { margin-top: auto; color: var(--bad); border-color: var(--bad-soft-border); background: var(--bad-soft-bg); }
+.appsidebar__item--danger:hover { border-color: var(--bad); color: var(--bad); }
+
+.appsidebar__note {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: var(--r-sm);
+  border: 1px dashed var(--dash-line);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* Prevents the page behind the open drawer from scrolling on touch. */
+body.sidebar-open { overflow: hidden; }
+
 
 /* ------------------------------- rail ------------------------------- */
 .rail { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
@@ -501,12 +791,12 @@ body:not(.authed) .workbench { display: none !important; }
 
 .card {
   background: var(--paper);
-  border: 1px solid var(--line);
+  border: 1px solid var(--glass-line);
   border-radius: var(--r);
-  padding: 20px;
-  box-shadow: var(--shadow);
+  padding: 22px;
+  box-shadow: var(--shadow-glass);
 }
-.card--bad { border-color: #e8c3bd; background: #fdf7f5; }
+.card--bad { border-color: var(--bad-soft-border); background: var(--bad-soft-bg); }
 
 .card__title {
   display: flex;
@@ -523,18 +813,19 @@ body:not(.authed) .workbench { display: none !important; }
 .card__step {
   font-size: 10.5px;
   letter-spacing: .1em;
-  color: #fff;
-  background: var(--mask);
+  color: var(--on-tile-mask);
+  background: var(--tile-mask);
   border-radius: 999px;
-  padding: 2px 8px;
+  padding: 3px 9px;
   line-height: 1.5;
+  box-shadow: var(--shadow-lift);
 }
 
 /* ---------- dropzone ---------- */
 .drop {
-  border: 1.5px dashed #c9c0a3;
+  border: 1.5px dashed var(--dash-line);
   border-radius: var(--r-sm);
-  background: #fffdf8;
+  background: var(--paper);
   padding: 22px 16px;
   cursor: pointer;
   transition: border-color .12s ease, background .12s ease;
@@ -545,14 +836,15 @@ body:not(.authed) .workbench { display: none !important; }
 
 .drop__body { display: grid; justify-items: center; text-align: center; gap: 8px; }
 .drop__icon {
-  width: 40px; height: 40px;
+  width: 42px; height: 42px;
   display: grid; place-items: center;
-  background: var(--mask-soft);
-  border-radius: 50%;
+  background: var(--tile-mask);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lift);
 }
 .drop__icon svg {
   width: 20px; height: 20px; fill: none;
-  stroke: var(--mask-ink); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round;
+  stroke: var(--on-tile-mask); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
 }
 .drop__label { font-weight: 600; font-size: 14px; }
 .drop__meta { font-size: 11.5px; color: var(--muted); }
@@ -571,16 +863,20 @@ body:not(.authed) .workbench { display: none !important; }
 /* ---------- fields ---------- */
 .field { display: grid; gap: 6px; }
 
-input[type="text"] {
+input[type="text"],
+input[type="email"],
+input[type="password"] {
   width: 100%;
   font: inherit;
   padding: 11px 14px;
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
-  background: #fff;
+  background: var(--paper);
   color: var(--ink);
 }
-input[type="text"]:focus-visible { outline: 2px solid var(--mask); outline-offset: 1px; border-color: var(--mask); }
+input[type="text"]:focus-visible,
+input[type="email"]:focus-visible,
+input[type="password"]:focus-visible { outline: 2px solid var(--mask); outline-offset: 1px; border-color: var(--mask); }
 
 .hint { margin: 0; font-size: 12.5px; color: var(--muted); }
 .hint em { font-style: normal; color: var(--ink-2); font-family: var(--mono); font-size: 11.5px; }
@@ -622,9 +918,9 @@ input[type="text"]:focus-visible { outline: 2px solid var(--mask); outline-offse
 .btn:active { transform: translateY(1px); }
 .btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 
-.btn--primary { background: var(--mask); color: #fff; box-shadow: var(--shadow-lift); }
+.btn--primary { background: var(--tile-mask); color: var(--on-tile-mask); box-shadow: var(--shadow-lift); }
 .btn--primary:hover:not(:disabled) { background: var(--mask-ink); }
-.btn--quiet { background: #fff; color: var(--ink); border-color: var(--line); }
+.btn--quiet { background: var(--paper); color: var(--ink); border-color: var(--line); }
 .btn--quiet:hover { border-color: var(--mask); color: var(--mask-ink); }
 .btn:disabled { opacity: .42; cursor: not-allowed; box-shadow: none; }
 
@@ -658,7 +954,7 @@ body[data-state="uploading"] #jobForm { opacity: .6; pointer-events: none; }
 /* small pill actions used inside list rows (groups, tasks) */
 .chipbtn {
   font: inherit; font-size: 12px; font-weight: 600;
-  background: #fff;
+  background: var(--paper);
   border: 1px solid var(--line);
   color: var(--mask-ink);
   padding: 6px 12px;
@@ -688,11 +984,11 @@ body[data-state="uploading"] #jobForm { opacity: .6; pointer-events: none; }
   width: 20px; height: 20px; flex: none;
   border-radius: 50%;
   border: 1.5px solid var(--line);
-  background: #fff;
+  background: var(--paper);
   display: grid; place-items: center;
   transition: background .2s ease, border-color .2s ease;
 }
-.step__check { font-size: 11px; color: #fff; opacity: 0; transform: scale(.6); transition: opacity .15s ease, transform .15s ease; }
+.step__check { font-size: 11px; color: var(--on-tile-mask); opacity: 0; transform: scale(.6); transition: opacity .15s ease, transform .15s ease; }
 .step.is-active { color: var(--ink); font-weight: 600; }
 .step.is-active .step__dot {
   border-color: var(--mask);
@@ -729,6 +1025,45 @@ body[data-state="uploading"] #jobForm { opacity: .6; pointer-events: none; }
 
 /* ---------- editing panel ---------- */
 
+/* Tab bar: groups the edit controls (Surfaces / Colour / Adjust) so this
+   card can keep growing — brush, feather, blend mode, perspective warp,
+   whatever comes next — without turning into one long scroll. Which panel
+   shows is driven by .editcard[data-edittab], set by js/edittabs.js; the
+   markup for all three panels is always present, [hidden] just toggles per
+   panel — see js/edittabs.js. */
+.editcard__handle { display: none; }  /* mobile-only drag handle, see responsive section */
+.edittabbar {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin: 0 0 18px;
+  border-radius: var(--r-pill);
+  background: var(--surround-2);
+  border: 1px solid var(--line-soft);
+}
+.edittab {
+  flex: 1;
+  padding: 9px 4px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-weight: 600;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background .12s ease, color .12s ease, box-shadow .12s ease;
+}
+.edittab:hover { color: var(--mask-ink); }
+.edittab[aria-selected="true"] {
+  background: var(--tile-mask);
+  color: var(--on-tile-mask);
+  box-shadow: var(--shadow-lift);
+}
+.edittab:focus-visible { outline: 2px solid var(--mask); outline-offset: 2px; }
+
+.editcard__export { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line-soft); }
+
 /* Surfaces: create, choose, and reorder — always visible (even at one
    surface), sitting above the colour/texture controls and above Download.
    Reordering here is real z-order: the compositor draws this array
@@ -749,7 +1084,7 @@ body[data-state="uploading"] #jobForm { opacity: .6; pointer-events: none; }
   text-align: left;
   padding: 8px 12px;
   border: 1px solid var(--line);
-  background: #fff;
+  background: var(--paper);
   border-radius: var(--r-sm);
   cursor: pointer;
   transition: border-color .12s ease, background .12s ease;
@@ -764,7 +1099,7 @@ body[data-state="uploading"] #jobForm { opacity: .6; pointer-events: none; }
   display: grid; place-items: center;
   font-size: 11px; line-height: 1;
   border: 1px solid var(--line);
-  background: #fff;
+  background: var(--paper);
   border-radius: var(--r-sm);
   color: var(--ink-2);
   cursor: pointer;
@@ -780,7 +1115,7 @@ body[data-state="uploading"] #jobForm { opacity: .6; pointer-events: none; }
   display: flex; align-items: center; gap: 9px;
   font: inherit; font-size: 13px; font-weight: 600;
   padding: 8px 12px;
-  border: 1.5px dashed #c9c0a3;
+  border: 1.5px dashed var(--dash-line);
   background: transparent;
   border-radius: var(--r-sm);
   color: var(--mask-ink);
@@ -807,6 +1142,72 @@ body[data-state="uploading"] #jobForm { opacity: .6; pointer-events: none; }
 .control__head label { font-weight: 600; font-size: 13.5px; }
 .control__head output { font-size: 11.5px; color: var(--muted); font-family: var(--mono); }
 .control__toggles { display: flex; align-items: center; justify-content: space-between; }
+.control__label { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+
+/* ============================ info tooltip ============================
+   Explanatory copy that used to sit inline as a permanent .hint paragraph
+   now lives behind this icon instead — hover or keyboard focus shows it on
+   desktop, a tap toggles it everywhere (see js/infotip.js), Escape or a tap
+   elsewhere closes it. The bubble opens upward, centred on the icon. */
+.infotip { position: relative; display: inline-flex; flex: none; }
+.infotip__icon {
+  width: 15px; height: 15px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--paper);
+  color: var(--muted);
+  font: 600 10px/1 var(--sans);
+  display: grid; place-items: center;
+  padding: 0;
+  cursor: help;
+  transition: border-color .12s ease, color .12s ease;
+}
+.infotip__icon::before { content: "i"; }
+.infotip__icon:hover, .infotip__icon:focus-visible { border-color: var(--mask); color: var(--mask-ink); }
+.infotip__bubble {
+  position: absolute;
+  bottom: calc(100% + 9px);
+  left: 50%;
+  transform: translate(-50%, 4px);
+  width: max-content;
+  max-width: 220px;
+  padding: 9px 11px;
+  border-radius: var(--r-sm);
+  background: var(--well);
+  color: var(--on-well);
+  font-size: 11.5px;
+  font-weight: 400;
+  line-height: 1.45;
+  box-shadow: var(--shadow-lift);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .12s ease, transform .12s ease;
+  z-index: 12;
+}
+.infotip__bubble::after {
+  content: "";
+  position: absolute;
+  top: 100%; left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: var(--well);
+}
+.infotip:hover .infotip__bubble,
+.infotip__icon:focus-visible ~ .infotip__bubble,
+.infotip.is-open .infotip__bubble {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  pointer-events: auto;
+}
+@media (max-width: 460px) {
+  /* A bubble centred on an icon near the rail's left edge would otherwise
+     run off the (narrow) screen — anchor it to the icon's edge instead. */
+  .infotip__bubble { left: auto; right: -8px; transform: translateY(4px); }
+  .infotip__bubble::after { left: auto; right: 12px; transform: none; }
+  .infotip:hover .infotip__bubble,
+  .infotip__icon:focus-visible ~ .infotip__bubble,
+  .infotip.is-open .infotip__bubble { transform: translateY(0); }
+}
 
 .swatches { display: grid; grid-template-columns: repeat(8, 1fr); gap: 7px; margin-bottom: 12px; }
 .swatch {
@@ -824,7 +1225,7 @@ body[data-state="uploading"] #jobForm { opacity: .6; pointer-events: none; }
 .tintrow { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 input[type="color"] {
   width: 46px; height: 32px; padding: 0;
-  border: 1px solid var(--line); border-radius: 8px; background: #fff; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--paper); cursor: pointer;
 }
 #tintReadout { font-size: 12px; color: var(--muted); }
 
@@ -836,7 +1237,7 @@ input[type="color"] {
   cursor: pointer;
   position: relative;
   background-size: 46px 46px;
-  background-color: #fff;
+  background-color: var(--paper);
   padding: 0;
   overflow: hidden;
 }
@@ -883,8 +1284,8 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { background: var(--mask
   position: fixed;
   left: 50%; bottom: 52px;
   transform: translateX(-50%);
-  background: var(--ink);
-  color: #eef0e6;
+  background: var(--well);
+  color: var(--on-well);
   padding: 11px 18px;
   border-radius: var(--r-pill);
   font-size: 13px;
@@ -894,14 +1295,62 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { background: var(--mask
 
 /* ============================ responsive ============================ */
 @media (max-width: 980px) {
-  .workbench { grid-template-columns: minmax(0, 1fr); padding: 16px; }
+  .workbench { grid-template-columns: minmax(0, 1fr); padding: 14px 14px 24px; }
   .well { height: auto; min-height: 320px; }
   #display, #picker { max-height: 56vh; }
-  .masthead { flex-wrap: wrap; padding: 14px 16px; }
+  .masthead { flex-wrap: wrap; margin: 12px 14px 0; padding: 14px 16px; border-radius: var(--r); }
   .masthead__reset { margin-left: 0; }
+  /* The hero-scale radius (var(--r-lg), 32px) reads as oversized on a phone
+     screen relative to how little edge each card actually has — step it
+     down one notch so corners stay proportionate to the card's own size. */
+  .well, .authcard { border-radius: var(--r); }
+
+  /* New photo / Sign out move into the hamburger drawer on mobile instead of
+     wrapping onto their own row next to the title — the drawer's copies
+     forward straight to these same (still-hidden, still-real) buttons, see
+     js/sidebar.js. */
+  .iconbtn.masthead__hamburger { display: flex; margin-left: auto; }
+  #newImageBtn.masthead__reset,
+  #logoutBtn.masthead__reset { display: none; }
+
+  /* Room at the bottom of the page so the collapsed sheet's peek (handle +
+     tab row) never sits on top of the last bit of in-flow content. */
+  .workbench { padding-bottom: 92px; }
+
+  /* The edit card becomes a bottom sheet: fixed to the viewport, collapsed
+     to just its handle + tab row by default, dragged/tapped open. The rest
+     of the rail (job form, tracking, error, select) is untouched — those
+     stay normal in-flow cards, same as before. */
+  .editcard {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 18;
+    max-height: 82vh;
+    margin: 0;
+    padding: 10px 18px calc(18px + env(safe-area-inset-bottom, 0px));
+    border-radius: 24px 24px 0 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    box-shadow: 0 -18px 46px -14px rgba(0,0,0,.45), var(--shadow-glass);
+    transition: transform .3s cubic-bezier(.32,.72,.28,1);
+    /* Collapsed: only the handle + title + tab row peek out above the fold. */
+    transform: translateY(calc(100% - 148px));
+  }
+  .editcard[data-sheetopen="true"] { transform: translateY(0); }
+  .editcard__handle {
+    display: block;
+    width: 40px; height: 4px;
+    margin: 2px auto 12px;
+    border-radius: var(--r-pill);
+    background: var(--line-hover);
+    cursor: pointer;
+  }
+  .editcard #editTitle { margin-bottom: 12px; }
+  .edittabbody { padding-bottom: 4px; }
 }
 
 @media (max-width: 460px) {
+  .masthead__title h1 { font-size: 21px; }
   .swatches { grid-template-columns: repeat(6, 1fr); }
 }
 
@@ -925,11 +1374,11 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { background: var(--mask
   padding: 13px 14px;
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
-  background: #fff;
+  background: var(--paper);
   cursor: pointer;
   transition: border-color .12s ease, background .12s ease;
 }
-.op:hover { border-color: #b7c9b9; }
+.op:hover { border-color: var(--line-hover); }
 .op input { margin: 3px 0 0; accent-color: var(--mask); flex: none; }
 .op__body { display: grid; gap: 3px; }
 .op__name { font-weight: 600; font-size: 14px; }
@@ -948,7 +1397,7 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { background: var(--mask
   border: 1px solid var(--line);
   border-radius: var(--r-pill);
   overflow: hidden;
-  background: #fff;
+  background: var(--paper);
   padding: 3px;
   gap: 3px;
 }
@@ -961,7 +1410,7 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { background: var(--mask
   border-radius: var(--r-pill);
 }
 .segmented input { position: absolute; opacity: 0; pointer-events: none; }
-.segmented label:has(input:checked) { background: var(--mask); color: #fff; font-weight: 600; }
+.segmented label:has(input:checked) { background: var(--mask); color: var(--on-tile-mask); font-weight: 600; }
 .segmented label:has(input:focus-visible) { outline: 2px solid var(--mask); outline-offset: 1px; }
 
 /* ============================ resume ============================ */
@@ -973,14 +1422,15 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { background: var(--mask
   color: var(--muted); margin: 12px 0 8px;
 }
 
-.tasklist { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 240px; overflow-y: auto; }
+.tasklist { list-style: none; margin: 0; padding: 0; display: grid; gap: 9px; max-height: 240px; overflow-y: auto; }
 .taskitem {
   display: flex; align-items: center; gap: 10px;
-  border: 1px solid var(--line); border-radius: var(--r-sm); background: #fff;
-  padding: 10px 12px; font-size: 12.5px;
+  border: 1px solid var(--glass-line); border-radius: var(--r-sm); background: var(--paper);
+  padding: 11px 13px; font-size: 12.5px;
+  box-shadow: var(--shadow);
   transition: box-shadow .12s ease, border-color .12s ease, background .12s ease;
 }
-.taskitem:hover { border-color: #cdd9cc; box-shadow: var(--shadow-lift); }
+.taskitem:hover { border-color: var(--line-hover); box-shadow: var(--shadow-lift); }
 .taskitem--active { border-color: var(--mask); background: var(--mask-wash); }
 .taskitem__main {
   /* A <button>, not a <div> — this is the click-to-preview control, kept
@@ -1036,28 +1486,30 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { background: var(--mask
   cursor: pointer;
   transition: background .12s ease, color .12s ease;
 }
-.chip:hover { background: var(--mask); color: #fff; }
+.chip:hover { background: var(--mask); color: var(--on-tile-mask); }
 .chip__x { font-size: 12px; line-height: 1; opacity: .7; }
 
 /* -------- saved selections: the "groups" the user builds and revisits -------- */
 .groups { margin-top: 20px; border-top: 1px solid var(--line-soft); padding-top: 16px; }
-.grouplist { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 8px; }
+.grouplist { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 9px; }
 .groupitem {
   display: flex; align-items: center; gap: 10px;
-  border: 1px solid var(--line); border-radius: var(--r-sm); background: #fff;
+  border: 1px solid var(--glass-line); border-radius: var(--r-sm); background: var(--paper);
   padding: 10px 10px 10px 12px; font-size: 13px;
+  box-shadow: var(--shadow);
   transition: box-shadow .12s ease, border-color .12s ease;
 }
-.groupitem:hover { border-color: #cdd9cc; box-shadow: var(--shadow-lift); }
+.groupitem:hover { border-color: var(--line-hover); box-shadow: var(--shadow-lift); }
 .groupitem__icon {
   flex: none;
-  width: 30px; height: 30px;
-  border-radius: 50%;
-  background: var(--mask-soft);
-  color: var(--mask-ink);
+  width: 32px; height: 32px;
+  border-radius: 10px;
+  background: var(--tile-mask);
+  color: var(--on-tile-mask);
   display: grid; place-items: center;
   font-weight: 700; font-size: 12.5px;
   font-family: var(--display);
+  box-shadow: var(--shadow-lift);
 }
 .groupitem__main { flex: 1; min-width: 0; display: grid; gap: 1px; }
 .groupitem__name { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
