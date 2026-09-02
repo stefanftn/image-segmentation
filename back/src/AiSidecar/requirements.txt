@@ -9,3 +9,4 @@ pillow
 numpy
 scipy
 prometheus-client
+timm
