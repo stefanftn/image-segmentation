@@ -33,6 +33,9 @@ import { Compositor, loadImageFromBlob, createLabelMap, isUnedited } from "./com
 import { createRegionPicker } from "./regions.js";
 import { createControls } from "./controls.js";
 import { createBrushTool } from "./brush.js";
+import { createWarpTool } from "./warp.js";
+import { collapseSheet } from "./edittabs.js";
+import { saveLayers, loadLayer, clearLayer } from "./editcache.js";
 
 /**
  * Fails loudly, in one place, rather than as a cryptic "Cannot read
@@ -125,10 +128,14 @@ const machine = createMachine();
 const compositor = new Compositor($("display"), { beforeCanvas: $("beforeCanvas") });
 const controls = createControls({
   compositor,
-  onEdit: () => updateReadout(),
+  onEdit: () => {
+    updateReadout();
+    syncWarpVisibility();
+  },
   onHistoryChange: ({ canUndo, canRedo }) => {
     $("undoBtn").disabled = !canUndo;
     $("redoBtn").disabled = !canRedo;
+    scheduleEditCacheSave();
   },
 });
 const picker = createRegionPicker({
@@ -146,6 +153,19 @@ const brush = createBrushTool({
   magnifierEl: $("brushMagnifier"),
   magnifierCanvas: $("brushMagnifierCanvas"),
   onStrokeCommitted: () => {
+    controls.commitHistoryCheckpoint();
+    updateReadout();
+  },
+});
+
+const warp = createWarpTool({
+  compositor,
+  getActiveLayerId: () => controls.activeId,
+  displayCanvas: $("display"),
+  overlaySvg: $("warpOverlay"),
+  quadPolygon: $("warpQuad"),
+  handlesContainer: $("warpHandles"),
+  onPointsCommitted: () => {
     controls.commitHistoryCheckpoint();
     updateReadout();
   },
@@ -623,6 +643,7 @@ function adoptSegmentMask(maskImage) {
     label,
     maskImage,
   });
+  restoreFromEditCache(layer.id);
 
   if (layer.coverage < 0.0005) {
     // The job succeeded and found essentially nothing. With no prompt to
@@ -795,6 +816,7 @@ function useSelection({ name } = {}) {
   const layer = compositor.getLayer(id)
     ? compositor.updateLayerSource(id, { mask: canvas, coverage, label })
     : compositor.addLayer({ id, label, mask: canvas, coverage });
+  restoreFromEditCache(layer.id);
 
   setReadyFace("edit");
   controls.setActiveLayer(layer.id);
@@ -814,9 +836,11 @@ function addLayerFromGroup(group) {
   if (coverage <= 0) return null;
   const id = `group:${group.id}`;
   const label = group.name || "Saved selection";
-  return compositor.getLayer(id)
+  const layer = compositor.getLayer(id)
     ? compositor.updateLayerSource(id, { mask: canvas, coverage, label })
     : compositor.addLayer({ id, label, mask: canvas, coverage });
+  restoreFromEditCache(id);
+  return layer;
 }
 
 /**
@@ -1799,6 +1823,64 @@ async function handleExport() {
   }
 }
 
+/** Downloads a blob under `filename`, the shared last mile every export
+ *  button here needs — open a link, click it, clean the object URL up
+ *  after a delay long enough for the download to have actually started. */
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+async function handleExportCompare() {
+  const button = $("exportCompareBtn");
+  button.classList.add("is-busy");
+  button.disabled = true;
+  try {
+    const blob = await compositor.toBeforeAfterBlob();
+    const base = (session.file?.name || "image").replace(/\.[^.]+$/, "");
+    downloadBlob(blob, `${base}-before-after.png`);
+    toast(t("edit.compareSaved"));
+  } catch (err) {
+    toast(err?.message || t("edit.compareExportFailed"));
+  } finally {
+    button.classList.remove("is-busy");
+    button.disabled = false;
+  }
+}
+
+async function handleExportMask() {
+  const button = $("exportMaskBtn");
+  const layer = compositor.getLayer(controls.activeId);
+  if (!layer) {
+    toast(t("edit.noActiveSurface"));
+    return;
+  }
+  button.classList.add("is-busy");
+  button.disabled = true;
+  try {
+    const blob = await new Promise((resolve, reject) => {
+      layer.mask.toBlob(
+        (b) => (b ? resolve(b) : reject(new Error("The mask could not be encoded."))),
+        "image/png",
+      );
+    });
+    const base = (session.file?.name || "image").replace(/\.[^.]+$/, "");
+    downloadBlob(blob, `${base}-${slug(layer.label) || "mask"}-mask.png`);
+    toast(t("edit.maskSaved"));
+  } catch (err) {
+    toast(err?.message || t("edit.maskExportFailed"));
+  } finally {
+    button.classList.remove("is-busy");
+    button.disabled = false;
+  }
+}
+
 /* ------------------------------------------------------------------ *
  * Readout strip
  * ------------------------------------------------------------------ *
@@ -1810,6 +1892,54 @@ async function handleExport() {
  * debug view is ever wanted again, this is exactly where it plugs back in.
  */
 function updateReadout() {}
+
+/** Debounced so a flurry of history checkpoints (rapid undo clicks, a fast
+ *  sequence of small edits) writes the cache once after things settle,
+ *  rather than once per checkpoint — each write encodes every layer's mask
+ *  as a fresh PNG, which isn't free. 1.2s of quiet is short enough that a
+ *  closed tab mid-edit still has a recent save, long enough that normal
+ *  back-to-back editing doesn't write on every single step. See
+ *  flushEditCacheSave() below for the "closed before 1.2s" edge case. */
+let editCacheSaveTimer = 0;
+function scheduleEditCacheSave() {
+  if (!compositor.layers.length) return;
+  clearTimeout(editCacheSaveTimer);
+  editCacheSaveTimer = setTimeout(() => {
+    saveLayers(compositor.layers);
+  }, 1200);
+}
+
+/** Saves immediately, skipping the debounce — called when the tab is about
+ *  to go away, so the most recent edit isn't the one time in ~1.2s the
+ *  debounce loses to a reload. Not a hard guarantee (nothing truly is, once
+ *  a page is unloading) but an IndexedDB write already in flight at that
+ *  point does reliably finish in every current browser, which is the gap
+ *  this closes. */
+function flushEditCacheSave() {
+  if (!compositor.layers.length) return;
+  clearTimeout(editCacheSaveTimer);
+  editCacheSaveTimer = 0;
+  saveLayers(compositor.layers);
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") flushEditCacheSave();
+});
+window.addEventListener("pagehide", flushEditCacheSave);
+
+/** If this layer id has a cached mask/edits from an earlier session (see
+ *  js/editcache.js), applies them in place. Fire-and-forget by design — the
+ *  caller doesn't await this, so the layer's fresh (unedited) state renders
+ *  immediately and the cached one replaces it a moment later if there is
+ *  one, rather than blocking the whole editor open on an IndexedDB read. */
+function restoreFromEditCache(layerId) {
+  loadLayer(layerId).then((cached) => {
+    if (!cached || !compositor.getLayer(layerId)) return;
+    compositor.updateLayerSource(layerId, { mask: cached.mask });
+    compositor.setEdits(layerId, cached.edits);
+    controls.refresh();
+    compositor.render();
+  });
+}
 
 /* ------------------------------------------------------------------ *
  * Job inputs (operation + mode)
@@ -1964,7 +2094,20 @@ function wireBrush() {
   const sizeReadout = $("brushSizeReadout");
   sizeInput.addEventListener("input", () => {
     brush.setSize(sizeInput.value);
-    sizeReadout.textContent = `${sizeInput.value}px`;
+    sizeReadout.value = sizeInput.value;
+  });
+  const applyTypedSize = () => {
+    const n = Number(sizeReadout.value);
+    if (Number.isNaN(n)) { sizeReadout.value = sizeInput.value; return; }
+    const clamped = Math.min(Number(sizeInput.max), Math.max(Number(sizeInput.min), n));
+    if (clamped === Number(sizeInput.value)) { sizeReadout.value = String(clamped); return; }
+    sizeReadout.value = String(clamped);
+    sizeInput.value = String(clamped);
+    brush.setSize(clamped);
+  };
+  sizeReadout.addEventListener("change", applyTypedSize);
+  sizeReadout.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") { applyTypedSize(); sizeReadout.blur(); }
   });
 
   $("brushMagnifierToggle").addEventListener("change", (event) => {
@@ -1979,15 +2122,32 @@ function wireBrush() {
   // The bottom sheet auto-expands when a tab is picked (see js/edittabs.js),
   // which is right for Colour/Adjust but wrong for Mask: the whole point is
   // to then touch the photo, and an expanded sheet can cover it entirely on
-  // a phone. Collapse it the instant a stroke starts. No-op on desktop,
-  // where data-sheetopen has no visual effect.
+  // a phone. Collapse it the instant a stroke starts. No-op on desktop.
   $("maskDrawSurface").addEventListener("pointerdown", () => {
-    document.querySelector(".editcard")?.setAttribute("data-sheetopen", "false");
+    collapseSheet();
   }, { capture: true });
 
   const applyTabState = () => brush.setActive(document.body.dataset.edittab === "mask");
   applyTabState();
   new MutationObserver(applyTabState).observe(document.body, { attributes: true, attributeFilter: ["data-edittab"] });
+}
+
+/** Perspective Warp's handles only make sense on the Adjust tab, and only
+ *  once a texture is actually picked — otherwise there's nothing to warp.
+ *  Called from wireWarp()'s tab observer and from onEdit() (texture picks,
+ *  layer switches, every other edit funnels through there too), so this
+ *  stays right regardless of which of those changed. */
+function syncWarpVisibility() {
+  const layer = compositor.getLayer(controls.activeId);
+  const show = document.body.dataset.edittab === "adjust" && Boolean(layer) && layer.edits.texture !== "none";
+  warp.setVisible(show);
+}
+
+function wireWarp() {
+  $("resetWarp").addEventListener("click", () => warp.reset());
+
+  syncWarpVisibility();
+  new MutationObserver(syncWarpVisibility).observe(document.body, { attributes: true, attributeFilter: ["data-edittab"] });
 }
 
 function wireHistory() {
@@ -2138,6 +2298,7 @@ function wire() {
   wireAuth();
   wireHistory();
   wireBrush();
+  wireWarp();
   zoomCtl = wireZoom();
 
   $("cancelPoll").addEventListener("click", () => {
@@ -2151,6 +2312,8 @@ function wire() {
   });
 
   $("exportBtn").addEventListener("click", handleExport);
+  $("exportCompareBtn").addEventListener("click", handleExportCompare);
+  $("exportMaskBtn").addEventListener("click", handleExportMask);
   $("newImageBtn").addEventListener("click", resetAll);
 
   $("addRegionBtn").addEventListener("click", () => {

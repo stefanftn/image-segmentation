@@ -138,6 +138,26 @@ html[data-theme="dark"] {
 
 * { box-sizing: border-box; }
 
+/* ============================ scrollbars ============================
+   Every scroll container in this app (.rail, the mobile bottom sheet,
+   .appsidebar, .tasklist, #authScreen) used the browser's own default
+   scrollbar, which doesn't know about this theme at all — a light grey OS
+   scrollbar over a near-black panel. One rule, applied globally, fixes all
+   of them at once; nothing here is scoped to a single element on purpose. */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-hover) transparent;
+}
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background-color: var(--line-hover);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  border-radius: var(--r-pill);
+}
+::-webkit-scrollbar-thumb:hover { background-color: var(--mask); }
+
 /* Buttons/inputs/selects/textareas don't inherit color or font from the page
    by default in any browser — the UA stylesheet gives them the system
    "buttontext" color and a system font instead. That's invisible in a
@@ -403,7 +423,7 @@ body[data-edittab="mask"] .maskdraw { pointer-events: auto; }
   position: absolute;
   z-index: 7;
   width: 40px; height: 40px;
-  margin-left: -20px; margin-top: -20px;
+  transform: translate(-50%, -50%);
   border-radius: 50%;
   border: 1.5px solid var(--on-well);
   box-shadow: 0 0 0 1px rgba(0,0,0,.5), inset 0 0 0 1px rgba(0,0,0,.5);
@@ -431,6 +451,35 @@ body[data-edittab="mask"] .maskdraw { pointer-events: auto; }
   border: 1.5px solid var(--mask);
   box-shadow: 0 0 0 1px rgba(0,0,0,.6);
 }
+
+/* ============================ perspective warp ============================ */
+.warpoverlay {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  z-index: 6;
+  pointer-events: none;
+}
+.warpoverlay__quad {
+  fill: rgba(163,230,53,.12);
+  stroke: var(--mask);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+.warphandles { position: absolute; inset: 0; z-index: 7; }
+.warphandle {
+  position: absolute;
+  width: 22px; height: 22px;
+  margin: -11px 0 0 -11px;
+  border-radius: 50%;
+  border: 2px solid var(--on-well);
+  background: var(--mask);
+  box-shadow: 0 2px 8px rgba(0,0,0,.55);
+  cursor: grab;
+  touch-action: none;
+  transition: transform .1s ease;
+}
+.warphandle:hover, .warphandle:focus-visible { transform: scale(1.15); }
+.warphandle:active { cursor: grabbing; transform: scale(1.08); }
 
 /* the wait indicator — a soft, breathing frame + shimmer sweep, plus a
    friendly caption. Reads as "alive and working", not "selection tool". */
@@ -637,8 +686,8 @@ body[data-edittab="mask"] .maskdraw { pointer-events: auto; }
   appearance: none;
 }
 
-/* ============================ theme toggle ============================ */
-.iconbtn--theme {
+/* ============================ settings ============================ */
+.iconbtn--settings {
   flex: none;
   width: 42px; height: 42px;
   display: grid; place-items: center;
@@ -646,18 +695,73 @@ body[data-edittab="mask"] .maskdraw { pointer-events: auto; }
   border: 1px solid var(--line);
   background: var(--paper);
   color: var(--ink-2);
-  font-size: 16px;
+  font-size: 17px;
   line-height: 1;
   cursor: pointer;
   box-shadow: var(--shadow);
   transition: border-color .12s ease, color .12s ease, box-shadow .12s ease, transform .12s ease;
 }
-.iconbtn--theme:hover { border-color: var(--mask); color: var(--mask-ink); }
-.iconbtn--theme:active { transform: translateY(1px); }
-.iconbtn--theme:focus-visible { outline: 2px solid var(--mask); outline-offset: 2px; }
-.themeicon { display: none; }
-html[data-theme="light"] .themeicon--sun { display: block; }
-html[data-theme="dark"]  .themeicon--moon { display: block; }
+.iconbtn--settings:hover { border-color: var(--mask); color: var(--mask-ink); }
+.iconbtn--settings:active { transform: translateY(1px); }
+.iconbtn--settings:focus-visible { outline: 2px solid var(--mask); outline-offset: 2px; }
+
+.settingsbackdrop {
+  position: fixed; inset: 0;
+  z-index: 44;
+  background: rgba(8, 10, 8, .55);
+}
+.settingsdialog {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 45;
+  width: min(360px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  padding: 20px;
+  border-radius: var(--r);
+  background: var(--paper);
+  border: 1px solid var(--glass-line);
+  box-shadow: var(--shadow-glass);
+}
+.settingsdialog__head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px;
+}
+.settingsdialog__head h2 {
+  margin: 0;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--ink);
+}
+.settingsrow {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  border-top: 1px solid var(--line-soft);
+}
+.settingsrow__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.settingsrow__label { font-weight: 600; font-size: 13.5px; color: var(--ink); }
+.settingsrow__hint { font-size: 11.5px; color: var(--muted); }
+.select {
+  flex: none;
+  padding: 8px 30px 8px 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 13px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: right 14px center, right 9px center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.select:hover { border-color: var(--mask); }
+.select:focus-visible { outline: 2px solid var(--mask); outline-offset: 1px; }
 
 /* ============================ masthead: new photo ============================ */
 .btn--ghost {
@@ -682,6 +786,7 @@ html[data-theme="dark"]  .themeicon--moon { display: block; }
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+.masthead__settings span:first-child { font-size: 18px; line-height: 1; }
 
 /* ============================ hamburger + sidebar ============================ */
 /* Hidden by default; shown only ≤980px in the responsive section below —
@@ -751,7 +856,6 @@ body:not(.authed) .sidebarbackdrop { display: none !important; }
   cursor: pointer; text-align: left;
   transition: border-color .12s ease, background .12s ease, color .12s ease;
 }
-.appsidebar__item .themeicon { font-size: 15px; }
 .appsidebar__item:hover { border-color: var(--mask); color: var(--mask-ink); }
 .appsidebar__item--danger { margin-top: auto; color: var(--bad); border-color: var(--bad-soft-border); background: var(--bad-soft-bg); }
 .appsidebar__item--danger:hover { border-color: var(--bad); color: var(--bad); }
@@ -782,6 +886,7 @@ body.sidebar-open { overflow: hidden; }
   .rail {
     height: 100%;
     min-height: 0;
+    overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
     padding-right: 4px;
@@ -896,6 +1001,7 @@ input[type="password"]:focus-visible { outline: 2px solid var(--mask); outline-o
   line-height: 1.45;
   color: var(--muted);
 }
+.note .infotip { margin-right: 5px; vertical-align: -2px; }
 .note--warn { color: var(--warn); }
 
 /* ---------- buttons ---------- */
@@ -1062,7 +1168,6 @@ body[data-state="uploading"] #jobForm { opacity: .6; pointer-events: none; }
 }
 .edittab:focus-visible { outline: 2px solid var(--mask); outline-offset: 2px; }
 
-.editcard__export { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line-soft); }
 
 /* Surfaces: create, choose, and reorder — always visible (even at one
    surface), sitting above the colour/texture controls and above Download.
@@ -1141,6 +1246,29 @@ body[data-state="uploading"] #jobForm { opacity: .6; pointer-events: none; }
 .control__head--sub { margin-top: 14px; }
 .control__head label { font-weight: 600; font-size: 13.5px; }
 .control__head output { font-size: 11.5px; color: var(--muted); font-family: var(--mono); }
+.numfield { display: inline-flex; align-items: baseline; gap: 2px; }
+.numinput {
+  width: 3.4em;
+  text-align: right;
+  font-size: 11.5px;
+  font-family: var(--mono);
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 2px 3px;
+  -moz-appearance: textfield;
+}
+.numinput::-webkit-inner-spin-button,
+.numinput::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.numinput:hover { border-color: var(--line); color: var(--ink-2); }
+.numinput:focus-visible {
+  outline: none;
+  border-color: var(--mask);
+  color: var(--ink);
+  background: var(--paper);
+}
+.numunit { font-size: 11.5px; color: var(--muted); font-family: var(--mono); }
 .control__toggles { display: flex; align-items: center; justify-content: space-between; }
 .control__label { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
 
@@ -1168,9 +1296,10 @@ body[data-state="uploading"] #jobForm { opacity: .6; pointer-events: none; }
   position: absolute;
   bottom: calc(100% + 9px);
   left: 50%;
-  transform: translate(-50%, 4px);
+  --infotip-shift: 0px;
+  transform: translate(calc(-50% + var(--infotip-shift)), 4px);
   width: max-content;
-  max-width: 220px;
+  max-width: 200px;
   padding: 9px 11px;
   border-radius: var(--r-sm);
   background: var(--well);
@@ -1182,12 +1311,13 @@ body[data-state="uploading"] #jobForm { opacity: .6; pointer-events: none; }
   opacity: 0;
   pointer-events: none;
   transition: opacity .12s ease, transform .12s ease;
-  z-index: 12;
+  z-index: 40;
 }
 .infotip__bubble::after {
   content: "";
   position: absolute;
-  top: 100%; left: 50%;
+  top: 100%;
+  left: calc(50% - var(--infotip-shift));
   transform: translateX(-50%);
   border: 5px solid transparent;
   border-top-color: var(--well);
@@ -1196,17 +1326,8 @@ body[data-state="uploading"] #jobForm { opacity: .6; pointer-events: none; }
 .infotip__icon:focus-visible ~ .infotip__bubble,
 .infotip.is-open .infotip__bubble {
   opacity: 1;
-  transform: translate(-50%, 0);
+  transform: translate(calc(-50% + var(--infotip-shift)), 0);
   pointer-events: auto;
-}
-@media (max-width: 460px) {
-  /* A bubble centred on an icon near the rail's left edge would otherwise
-     run off the (narrow) screen — anchor it to the icon's edge instead. */
-  .infotip__bubble { left: auto; right: -8px; transform: translateY(4px); }
-  .infotip__bubble::after { left: auto; right: 12px; transform: none; }
-  .infotip:hover .infotip__bubble,
-  .infotip__icon:focus-visible ~ .infotip__bubble,
-  .infotip.is-open .infotip__bubble { transform: translateY(0); }
 }
 
 .swatches { display: grid; grid-template-columns: repeat(8, 1fr); gap: 7px; margin-bottom: 12px; }
@@ -1298,20 +1419,37 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { background: var(--mask
   .workbench { grid-template-columns: minmax(0, 1fr); padding: 14px 14px 24px; }
   .well { height: auto; min-height: 320px; }
   #display, #picker { max-height: 56vh; }
-  .masthead { flex-wrap: wrap; margin: 12px 14px 0; padding: 14px 16px; border-radius: var(--r); }
+  .masthead {
+    margin: 10px 14px 0;
+    padding: 10px 14px;
+    border-radius: var(--r-pill);
+    gap: 10px;
+  }
   .masthead__reset { margin-left: 0; }
   /* The hero-scale radius (var(--r-lg), 32px) reads as oversized on a phone
      screen relative to how little edge each card actually has — step it
      down one notch so corners stay proportionate to the card's own size. */
   .well, .authcard { border-radius: var(--r); }
 
+  /* One thin bar: logo, name, hamburger — nothing else. The subtitle is
+     marketing copy that doesn't need to cost a phone screen this much
+     height on every single visit; the theme toggle is still one tap away
+     inside the hamburger's own drawer, so dropping the standalone button
+     here isn't losing the feature, just one of its two entry points. */
+  .masthead__title p { display: none; }
+  .masthead__theme { display: none; }
+  .masthead__mark { height: 30px; }
+  .masthead__logo { height: 22px; }
+  .masthead__title h1 { font-size: 17px; }
+
   /* New photo / Sign out move into the hamburger drawer on mobile instead of
      wrapping onto their own row next to the title — the drawer's copies
      forward straight to these same (still-hidden, still-real) buttons, see
      js/sidebar.js. */
-  .iconbtn.masthead__hamburger { display: flex; margin-left: auto; }
+  .iconbtn.masthead__hamburger { display: grid; margin-left: auto; }
   #newImageBtn.masthead__reset,
-  #logoutBtn.masthead__reset { display: none; }
+  #logoutBtn.masthead__reset,
+  #settingsToggle.masthead__reset { display: none; }
 
   /* Room at the bottom of the page so the collapsed sheet's peek (handle +
      tab row) never sits on top of the last bit of in-flow content. */
@@ -1333,18 +1471,24 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { background: var(--mask
     overscroll-behavior: contain;
     box-shadow: 0 -18px 46px -14px rgba(0,0,0,.45), var(--shadow-glass);
     transition: transform .3s cubic-bezier(.32,.72,.28,1);
-    /* Collapsed: only the handle + title + tab row peek out above the fold. */
-    transform: translateY(calc(100% - 148px));
+    /* --sheet-offset is set by js/edittabs.js — continuously while
+       dragging the handle, or snapped to 0 (open) / sheet-height (collapsed)
+       for a tap on the handle or a tab. 148px here only sizes the very
+       first paint, before any JS has run. */
+    --sheet-offset: calc(100% - 148px);
+    transform: translateY(var(--sheet-offset));
   }
-  .editcard[data-sheetopen="true"] { transform: translateY(0); }
+  .editcard.is-dragging { transition: none; }
   .editcard__handle {
     display: block;
     width: 40px; height: 4px;
     margin: 2px auto 12px;
     border-radius: var(--r-pill);
     background: var(--line-hover);
-    cursor: pointer;
+    cursor: grab;
+    touch-action: none;
   }
+  .editcard.is-dragging .editcard__handle { cursor: grabbing; }
   .editcard #editTitle { margin-bottom: 12px; }
   .edittabbody { padding-bottom: 4px; }
 }
@@ -1412,6 +1556,7 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { background: var(--mask
 .segmented input { position: absolute; opacity: 0; pointer-events: none; }
 .segmented label:has(input:checked) { background: var(--mask); color: var(--on-tile-mask); font-weight: 600; }
 .segmented label:has(input:focus-visible) { outline: 2px solid var(--mask); outline-offset: 1px; }
+.segmented--grid2 { grid-auto-flow: row; grid-template-columns: 1fr 1fr; }
 
 /* ============================ resume ============================ */
 .resume { margin-top: 18px; border-top: 1px solid var(--line-soft); padding-top: 14px; }

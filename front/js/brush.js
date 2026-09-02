@@ -80,14 +80,27 @@ export function createBrushTool({
     const view = magnifierCanvas.width; // square, see HTML (120x120)
     const zoom = 3;
     const srcSize = view / zoom;
+    const srcX = dispX - srcSize / 2;
+    const srcY = dispY - srcSize / 2;
     const mctx = magnifierCanvas.getContext("2d");
     mctx.imageSmoothingEnabled = false;
     mctx.clearRect(0, 0, view, view);
-    mctx.drawImage(
-      displayCanvas,
-      dispX - srcSize / 2, dispY - srcSize / 2, srcSize, srcSize,
-      0, 0, view, view,
-    );
+    // The last full composite (may be a frame stale mid-stroke)...
+    mctx.drawImage(displayCanvas, srcX, srcY, srcSize, srcSize, 0, 0, view, view);
+    // ...with the in-progress stroke's own live preview layered on top, so
+    // what's actually being painted right now is visible before it commits
+    // (the real mask update only happens on pointerup, not every move).
+    mctx.drawImage(drawCanvas, srcX, srcY, srcSize, srcSize, 0, 0, view, view);
+
+    // The brush's real footprint, at the same zoom as the crop above — the
+    // same radiusFrac math a stroke commits with, just evaluated live.
+    const radiusFrac = (sizePx / 2) / frac.rect.width;
+    const radiusInMagnifier = radiusFrac * displayCanvas.width * zoom;
+    mctx.beginPath();
+    mctx.arc(view / 2, view / 2, radiusInMagnifier, 0, Math.PI * 2);
+    mctx.lineWidth = 1.5;
+    mctx.strokeStyle = mode === "brush" ? "rgba(163,230,53,.9)" : "rgba(255,138,128,.9)";
+    mctx.stroke();
 
     const boxRect = canvasBox.getBoundingClientRect();
     const half = magnifierEl.offsetWidth / 2 || view / 2;

@@ -29,6 +29,8 @@ export function createControls({ compositor, onEdit = () => {}, onHistoryChange 
     tintReadout: $("tintReadout"),
     tintStrength: $("tintStrength"),
     tintStrengthReadout: $("tintStrengthReadout"),
+    specular: $("specular"),
+    specularReadout: $("specularReadout"),
     hue: $("hue"),
     hueReadout: $("hueReadout"),
     sat: $("sat"),
@@ -41,6 +43,10 @@ export function createControls({ compositor, onEdit = () => {}, onHistoryChange 
     texRotationReadout: $("texRotationReadout"),
     texDepth: $("texDepth"),
     texDepthReadout: $("texDepthReadout"),
+    feather: $("feather"),
+    featherReadout: $("featherReadout"),
+    growShrink: $("growShrink"),
+    growShrinkReadout: $("growShrinkReadout"),
     showMask: $("showMask"),
     resetEdits: $("resetEdits"),
     surfaceList: $("surfaceList"),
@@ -201,27 +207,44 @@ export function createControls({ compositor, onEdit = () => {}, onHistoryChange 
 
   function syncReadouts(edits) {
     el.hue.value = String(edits.hue);
-    el.hueReadout.textContent = `${edits.hue > 0 ? "+" : ""}${edits.hue}°`;
+    el.hueReadout.value = String(edits.hue);
 
     el.sat.value = String(edits.saturation);
-    el.satReadout.textContent = `${edits.saturation}%`;
+    el.satReadout.value = String(edits.saturation);
 
     el.texStrength.value = String(Math.round(edits.textureStrength * 100));
-    el.texStrengthReadout.textContent = `${Math.round(edits.textureStrength * 100)}%`;
+    el.texStrengthReadout.value = String(Math.round(edits.textureStrength * 100));
 
     el.texRotation.value = String(edits.textureRotation);
-    el.texRotationReadout.textContent = `${edits.textureRotation > 0 ? "+" : ""}${edits.textureRotation}°`;
+    el.texRotationReadout.value = String(edits.textureRotation);
     el.texDepth.value = String(edits.textureDepth);
-    el.texDepthReadout.textContent = `${edits.textureDepth > 0 ? "+" : ""}${edits.textureDepth}`;
+    el.texDepthReadout.value = String(edits.textureDepth);
     // Rotating or depth-warping a texture that isn't applied has nothing to
     // show — disabled rather than hidden, so the controls don't jump around
     // as textures are picked and cleared.
     el.texRotation.disabled = edits.texture === "none";
     el.texDepth.disabled = edits.texture === "none";
+    el.texRotationReadout.disabled = edits.texture === "none";
+    el.texDepthReadout.disabled = edits.texture === "none";
+
+    el.feather.value = String(edits.feather);
+    el.featherReadout.value = String(edits.feather);
+
+    el.growShrink.value = String(edits.growShrink);
+    el.growShrinkReadout.value = String(edits.growShrink);
 
     el.tintStrength.value = String(Math.round(edits.tintStrength * 100));
-    el.tintStrengthReadout.textContent = `${Math.round(edits.tintStrength * 100)}%`;
+    el.tintStrengthReadout.value = String(Math.round(edits.tintStrength * 100));
     el.tintStrength.disabled = !edits.tint;
+    el.tintStrengthReadout.disabled = !edits.tint;
+
+    for (const input of document.querySelectorAll('input[name="blendMode"]')) {
+      input.checked = input.value === (edits.blendMode || "normal");
+    }
+
+    el.specular.value = String(edits.specular);
+    el.specularReadout.value = String(edits.specular);
+
 
     el.texReadout.textContent = edits.texture;
     for (const button of el.textures.querySelectorAll(".texture")) {
@@ -334,10 +357,39 @@ export function createControls({ compositor, onEdit = () => {}, onHistoryChange 
 
   /* --------------------- listeners --------------------- */
 
+  /** Wires a numeric text field to mirror and drive the same range slider —
+   *  a value can be typed directly (Enter or blur commits it) instead of
+   *  only dragged. `toEdit` converts the field's raw number into whatever
+   *  commit() expects (tintStrength/textureStrength store 0…1, not 0…100,
+   *  for instance). Out-of-range typed values clamp to the slider's own
+   *  min/max rather than silently doing nothing. */
+  function linkNumberField(field, slider, toEdit) {
+    const clamp = (n) => Math.min(Number(slider.max), Math.max(Number(slider.min), n));
+    const apply = () => {
+      const n = Number(field.value);
+      if (Number.isNaN(n)) { field.value = slider.value; return; }
+      const clamped = clamp(n);
+      // "change" and Enter's keydown can both fire for one edit (typing a
+      // value then pressing Enter triggers both) — without this, that's
+      // two history entries for what the person did once.
+      if (clamped === Number(slider.value)) { field.value = String(clamped); return; }
+      field.value = String(clamped);
+      slider.value = String(clamped);
+      commit(toEdit(clamped));
+      pushHistory();
+    };
+    field.addEventListener("change", apply);
+    field.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") { apply(); field.blur(); }
+    });
+  }
+
   el.hue.addEventListener("input", () => commit({ hue: Number(el.hue.value) }));
   el.hue.addEventListener("change", pushHistory);
+  linkNumberField(el.hueReadout, el.hue, (n) => ({ hue: n }));
   el.sat.addEventListener("input", () => commit({ saturation: Number(el.sat.value) }));
   el.sat.addEventListener("change", pushHistory);
+  linkNumberField(el.satReadout, el.sat, (n) => ({ saturation: n }));
   el.tint.addEventListener("input", () => {
     const patch = { tint: el.tint.value };
     // Same reasoning as the swatch handler: dragging the colour wheel while
@@ -350,16 +402,38 @@ export function createControls({ compositor, onEdit = () => {}, onHistoryChange 
   el.tintStrength.addEventListener("input", () =>
     commit({ tintStrength: Number(el.tintStrength.value) / 100 }));
   el.tintStrength.addEventListener("change", pushHistory);
+  linkNumberField(el.tintStrengthReadout, el.tintStrength, (n) => ({ tintStrength: n / 100 }));
+
+  for (const input of document.querySelectorAll('input[name="blendMode"]')) {
+    input.addEventListener("change", () => {
+      if (input.checked) { commit({ blendMode: input.value }); pushHistory(); }
+    });
+  }
+
+  el.specular.addEventListener("input", () => commit({ specular: Number(el.specular.value) }));
+  el.specular.addEventListener("change", pushHistory);
+  linkNumberField(el.specularReadout, el.specular, (n) => ({ specular: n }));
 
   el.texStrength.addEventListener("input", () =>
     commit({ textureStrength: Number(el.texStrength.value) / 100 }));
   el.texStrength.addEventListener("change", pushHistory);
+  linkNumberField(el.texStrengthReadout, el.texStrength, (n) => ({ textureStrength: n / 100 }));
   el.texRotation.addEventListener("input", () =>
     commit({ textureRotation: Number(el.texRotation.value) }));
   el.texRotation.addEventListener("change", pushHistory);
+  linkNumberField(el.texRotationReadout, el.texRotation, (n) => ({ textureRotation: n }));
   el.texDepth.addEventListener("input", () =>
     commit({ textureDepth: Number(el.texDepth.value) }));
   el.texDepth.addEventListener("change", pushHistory);
+  linkNumberField(el.texDepthReadout, el.texDepth, (n) => ({ textureDepth: n }));
+
+  el.growShrink.addEventListener("input", () => commit({ growShrink: Number(el.growShrink.value) }));
+  el.growShrink.addEventListener("change", pushHistory);
+  linkNumberField(el.growShrinkReadout, el.growShrink, (n) => ({ growShrink: n }));
+
+  el.feather.addEventListener("input", () => commit({ feather: Number(el.feather.value) }));
+  el.feather.addEventListener("change", pushHistory);
+  linkNumberField(el.featherReadout, el.feather, (n) => ({ feather: n }));
 
   el.showMask.addEventListener("change", () => {
     compositor.showMaskEdge = el.showMask.checked;

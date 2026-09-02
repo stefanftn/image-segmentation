@@ -65,6 +65,11 @@ export async function loadImageFromBlob(blob) {
   }
 }
 
+// At feather=100, the mask blurs by this fraction of the working
+// resolution's shorter edge — scale-relative so the same slider value looks
+// equally soft in the small preview and the full-resolution export.
+const FEATHER_MAX_FRACTION = 0.05;
+
 function makeCanvas(width, height) {
   const c = document.createElement("canvas");
   c.width = Math.max(1, Math.round(width));
@@ -467,6 +472,17 @@ export function defaultEdits() {
     textureRotation: 0,   // degrees, -180…180 — matches the tile to a wall's angle
     textureDepth: 0,       // -100…100 — one side of the tile compressed toward
                             // the other, approximating a wall receding at an angle
+    feather: 0,            // 0…100 — soft-edge blur on the mask itself, see
+                            // _buildStage(); 0 is the original hard cut
+    growShrink: 0,          // pixels at full resolution, +grow/-shrink — see
+                            // _growShrink(); 0 is the mask exactly as given
+    warpPoints: IDENTITY_WARP_POINTS.map((p) => [...p]), // own copy per layer —
+                            // never mutated in place, only ever replaced
+                            // wholesale, same as every other edit here
+    blendMode: "normal",   // "normal" | "multiply" | "soft-light" | "overlay"
+                            // — how the colour/hue-sat layer meets the base
+    specular: 0,            // 0…100 — how much of the original wall's own
+                            // highlights/shine to keep visible on top
   };
 }
 
@@ -479,7 +495,12 @@ export function isUnedited(edits) {
     && edits.texture === d.texture
     && edits.textureStrength === d.textureStrength
     && edits.textureRotation === d.textureRotation
-    && edits.textureDepth === d.textureDepth;
+    && edits.textureDepth === d.textureDepth
+    && edits.feather === d.feather
+    && edits.growShrink === d.growShrink
+    && edits.blendMode === d.blendMode
+    && edits.specular === d.specular
+    && isWarpIdentity(edits.warpPoints);
 }
 
 /**
@@ -492,10 +513,10 @@ export function isUnedited(edits) {
  * `depth` runs -1…1. At 0 every strip is the same width (no warp). Moving
  * positive widens the left strips and narrows the right ones — one edge
  * reads as nearer (larger, more of the tile's detail), the other as farther
- * (compressed) — the closest a 2D affine-only canvas can get to suggesting
- * a wall's texture receding at an angle, without a true perspective/
- * homography transform (which Canvas 2D doesn't support — that would need
- * WebGL). Negative depth mirrors the effect to the other side.
+ * (compressed): a cheap, one-axis suggestion of a wall receding at an angle.
+ * For an actual 4-corner perspective fit, see the Perspective Warp controls
+ * just below this function — this one stays because it's a single slider
+ * with no handles to place, which is sometimes all a texture needs.
  *
  * A strip's weight never reaches zero: total collapse would erase the
  * tile's content at that edge rather than just compressing it.
@@ -516,6 +537,90 @@ export function depthStripBoundaries(totalWidth, strips, depth) {
   }
   boundaries[strips] = totalWidth; // pin the far edge exactly — floats drift
   return boundaries;
+}
+
+/**
+ * The default (unwarped) perspective-warp corners: the tile fill's own
+ * rectangle, in 0…1 fractions of it — top-left, top-right, bottom-right,
+ * bottom-left. Dragging a handle in the UI moves one of these; leaving all
+ * four here means "no perspective distortion", the same role 0 plays for
+ * feather or growShrink.
+ */
+export const IDENTITY_WARP_POINTS = [[0, 0], [1, 0], [1, 1], [0, 1]];
+
+/** True if `points` is close enough to IDENTITY_WARP_POINTS to skip the
+ *  warp entirely — avoids the grid-triangle pass's cost when nobody has
+ *  touched a handle. */
+export function isWarpIdentity(points) {
+  if (!points) return true;
+  return points.every(([x, y], i) => {
+    const [ix, iy] = IDENTITY_WARP_POINTS[i];
+    return Math.abs(x - ix) < 1e-4 && Math.abs(y - iy) < 1e-4;
+  });
+}
+
+/**
+ * Gaussian elimination with partial pivoting for a square linear system
+ * A·x = b. Used for both the 8-unknown homography solve and the 3-unknown
+ * per-triangle affine solve below — same method, different sizes, so it's
+ * one general routine rather than two hand-derived formulas (which are easy
+ * to get subtly wrong and hard to tell apart from correct-but-different).
+ */
+function solveLinearSystem(A, b) {
+  const n = A.length;
+  const M = A.map((row, i) => [...row, b[i]]);
+  for (let col = 0; col < n; col += 1) {
+    let pivot = col;
+    for (let r = col + 1; r < n; r += 1) {
+      if (Math.abs(M[r][col]) > Math.abs(M[pivot][col])) pivot = r;
+    }
+    [M[col], M[pivot]] = [M[pivot], M[col]];
+    const pv = M[col][col] || 1e-9; // degenerate (collinear) points: avoid a hard divide-by-zero
+    for (let c = col; c <= n; c += 1) M[col][c] /= pv;
+    for (let r = 0; r < n; r += 1) {
+      if (r === col) continue;
+      const factor = M[r][col];
+      for (let c = col; c <= n; c += 1) M[r][c] -= factor * M[col][c];
+    }
+  }
+  return M.map((row) => row[n]);
+}
+
+/**
+ * The projective transform (8 numbers, h8 fixed to 1) mapping each of 4
+ * `src` points to the corresponding `dst` point — the standard DLT (direct
+ * linear transform) system. `applyHomography` below is its inverse
+ * operation: given the matrix and a point, where does it land.
+ */
+function computeHomography(src, dst) {
+  const A = [];
+  const b = [];
+  for (let i = 0; i < 4; i += 1) {
+    const [x, y] = src[i];
+    const [X, Y] = dst[i];
+    A.push([x, y, 1, 0, 0, 0, -x * X, -y * X]);
+    b.push(X);
+    A.push([0, 0, 0, x, y, 1, -x * Y, -y * Y]);
+    b.push(Y);
+  }
+  return [...solveLinearSystem(A, b), 1];
+}
+
+function applyHomography(h, x, y) {
+  const w = h[6] * x + h[7] * y + 1;
+  return [(h[0] * x + h[1] * y + h[2]) / w, (h[3] * x + h[4] * y + h[5]) / w];
+}
+
+/** The unique affine transform (as canvas's own [a,b,c,d,e,f]) taking
+ *  triangle `s` to triangle `t` — solved as two independent 3-unknown
+ *  systems (one for the x-output coefficients, one for y) rather than a
+ *  hand-derived Cramer's-rule formula, for the same "one routine, checked
+ *  once" reason as the homography above. */
+function affineFromTriangles(s, t) {
+  const A = s.map(([x, y]) => [x, y, 1]);
+  const [a, c, e] = solveLinearSystem(A, t.map(([X]) => X));
+  const [b, d, f] = solveLinearSystem(A, t.map(([, Y]) => Y));
+  return [a, b, c, d, e, f];
 }
 
 /* ------------------------------------------------------------------ *
@@ -674,6 +779,10 @@ export class Compositor {
     const layer = this.getLayer(id);
     if (!layer) return null;
     layer.edits = { ...layer.edits, ...patch };
+    // Every other edit here is a post-hoc adjustment applied fresh each
+    // render from the cached mask-clip; feather and growShrink change what
+    // that clip itself looks like, so the cache has to go.
+    if ("feather" in patch || "growShrink" in patch) this._stage = null;
     return layer.edits;
   }
 
@@ -701,12 +810,80 @@ export class Compositor {
       cctx.imageSmoothingQuality = "high";
       cctx.drawImage(this.original, 0, 0, w, h);        // 1. the full original
       cctx.globalCompositeOperation = "destination-in";
-      cctx.drawImage(layer.mask, 0, 0, w, h);           // 2. keep only the mask
+
+      // Grow/Shrink first — it changes the boundary's shape and size —
+      // then Feather softens whatever boundary results. growShrink is in
+      // pixels at FULL resolution (matches how the person thinks about it:
+      // "push the edge out 20px"), scaled down by `scale` for the preview
+      // so it reads the same at 1200px and at full export size.
+      const growShrink = layer.edits.growShrink || 0;
+      const maskSource = growShrink
+        ? this._growShrink(layer.mask, w, h, growShrink * scale)
+        : layer.mask;
+
+      // Feather blurs the MASK, not the photo — the mask is a flat white
+      // shape, so blurring it only softens its alpha falloff at the edge;
+      // colour never shifts. That soft alpha is what makes the *composited*
+      // result blend gradually into the untouched original near a boundary
+      // (ordinary alpha blending in _composite() does the rest) rather than
+      // literally blurring photo detail there. FEATHER_MAX_FRACTION caps it
+      // at a sane fraction of the working resolution — a scale-relative
+      // number, so 100% feather looks the same soft at preview size and at
+      // full export resolution, not "subtle at 1200px, enormous at 4000px".
+      const feather = layer.edits.feather || 0;
+      if (feather > 0) {
+        const blurPx = (feather / 100) * Math.min(w, h) * FEATHER_MAX_FRACTION;
+        cctx.filter = `blur(${blurPx}px)`;
+      }
+      cctx.drawImage(maskSource, 0, 0, w, h);           // 2. keep only the mask
+      cctx.filter = "none";
       cctx.globalCompositeOperation = "source-over";
       layers.set(layer.id, clipped);
     }
 
     return { scale, width: w, height: h, base, layers };
+  }
+
+  /**
+   * Approximate morphological dilation (grow, px > 0) or erosion (shrink,
+   * px < 0) using compositing only — no per-pixel loops, so this is cheap
+   * enough to run on every slider tick, even rebuilding the whole stage.
+   * Dilation unions the mask drawn at `directions` points around a circle
+   * of the given radius — a 16-point approximation of a disc, not a true
+   * one, but visually indistinguishable at the sizes this slider allows.
+   * Erosion is the standard identity NOT(dilate(NOT(mask))): invert, grow
+   * the inverted (background) shape, invert back — which turns "shrink"
+   * into the same offset-union trick as "grow" with two extra full-frame
+   * passes, rather than needing a second geometric algorithm.
+   */
+  _growShrink(mask, w, h, px) {
+    if (!px) return mask;
+    const directions = 16;
+    const radius = Math.abs(px);
+
+    const dilate = (source) => {
+      const out = makeCanvas(w, h);
+      const octx = out.getContext("2d");
+      octx.globalCompositeOperation = "source-over";
+      for (let i = 0; i < directions; i += 1) {
+        const angle = (i / directions) * Math.PI * 2;
+        octx.drawImage(source, Math.cos(angle) * radius, Math.sin(angle) * radius, w, h);
+      }
+      octx.drawImage(source, 0, 0, w, h);
+      return out;
+    };
+
+    const invert = (source) => {
+      const out = makeCanvas(w, h);
+      const octx = out.getContext("2d");
+      octx.fillStyle = "#fff";
+      octx.fillRect(0, 0, w, h);
+      octx.globalCompositeOperation = "destination-out";
+      octx.drawImage(source, 0, 0, w, h);
+      return out;
+    };
+
+    return px > 0 ? dilate(mask) : invert(dilate(invert(mask)));
   }
 
   _stageFor(scale) {
@@ -777,7 +954,7 @@ export class Compositor {
     for (const layer of this.layers) {
       const clipped = stage.layers.get(layer.id);
       if (!clipped) continue;
-      const { tint, tintStrength, hue, saturation, texture, textureStrength, textureRotation, textureDepth } = layer.edits;
+      const { tint, tintStrength, hue, saturation, texture, textureStrength, textureRotation, textureDepth, warpPoints, blendMode, specular } = layer.edits;
 
       /* --- colour + saturation, inside the mask only --- */
       const { canvas: adjusted, ctx: actx } = this._scratchFor(1, w, h);
@@ -803,7 +980,15 @@ export class Compositor {
         actx.globalCompositeOperation = "source-over";
       }
 
+      // Blend Mode governs how the colour/hue-sat layer meets the base —
+      // "normal" is ordinary source-over (the flat, literal colour at full
+      // tint strength this app already settled on); Multiply/Soft Light/
+      // Overlay are Canvas 2D's own native composite operations, so no
+      // custom pixel math is needed to let the original wall's shading and
+      // texture show back through the new colour.
+      ctx.globalCompositeOperation = blendMode && blendMode !== "normal" ? blendMode : "source-over";
       ctx.drawImage(adjusted, 0, 0);
+      ctx.globalCompositeOperation = "source-over";
       // Slot 1 ("adjusted") is fully consumed as of the drawImage above —
       // free to reuse below, which _warpDepth does.
 
@@ -830,7 +1015,12 @@ export class Compositor {
         // Depth warps the tile fill itself, full-frame and unclipped — the
         // mask boundary is never part of this canvas, so it can't be
         // distorted by it. Clipping to the mask always happens after.
-        const warped = textureDepth ? this._warpDepth(raw, w, h, textureDepth / 100) : raw;
+        // Perspective Warp (4 draggable corners) runs on top of that, same
+        // reasoning — full-frame, unclipped, mask applied afterwards.
+        const depthWarped = textureDepth ? this._warpDepth(raw, w, h, textureDepth / 100) : raw;
+        const warped = isWarpIdentity(warpPoints)
+          ? depthWarped
+          : this._warpPerspective(depthWarped, w, h, warpPoints);
 
         const { canvas: tex, ctx: tctx } = this._scratchFor(2, w, h);
         tctx.drawImage(warped, 0, 0);
@@ -841,6 +1031,20 @@ export class Compositor {
         ctx.globalAlpha = textureStrength;
         ctx.globalCompositeOperation = "multiply";      // keeps shading readable
         ctx.drawImage(tex, 0, 0);
+        ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = "source-over";
+      }
+
+      /* --- specular highlights --- */
+      if (specular > 0) {
+        // Isolated from the ORIGINAL (masked) pixels, never from the
+        // colour/texture just drawn — a highlight is light bouncing off
+        // the wall's own surface, not off the paint colour, so it has to
+        // come from `clipped`, before any edit touched it.
+        const highlights = this._extractHighlights(clipped, w, h, specular);
+        ctx.globalCompositeOperation = "screen";      // brightens, never darkens
+        ctx.globalAlpha = Math.min(1, 0.35 + specular / 130);
+        ctx.drawImage(highlights, 0, 0);
         ctx.globalAlpha = 1;
         ctx.globalCompositeOperation = "source-over";
       }
@@ -876,6 +1080,85 @@ export class Compositor {
   }
 
   /**
+   * A true 4-corner perspective fit: `source`'s own rectangle warped so its
+   * four corners land on `points` (each an [x,y] pair in 0…1 fractions of
+   * w×h — denormalized here). Canvas 2D has no native projective-transform
+   * primitive, only affine (scale/rotate/skew/translate), so this
+   * subdivides the source into a grid of small quads, splits each into two
+   * triangles, and draws every triangle through its own affine transform —
+   * a triangle always maps correctly under an affine transform, and enough
+   * small ones make the curve of the true projection invisible at any
+   * single cell. `grid` trades quality for speed; 24 is fine-grained enough
+   * that raising it further doesn't visibly change a texture tile, even
+   * dragging a handle live.
+   */
+  _warpPerspective(source, w, h, points, grid = 24) {
+    const dst = points.map(([x, y]) => [x * w, y * h]);
+    const srcCorners = [[0, 0], [w, 0], [w, h], [0, h]];
+    const H = computeHomography(srcCorners, dst);
+
+    const out = makeCanvas(w, h);
+    const octx = out.getContext("2d");
+    const drawTri = (s0, s1, s2) => {
+      const d0 = applyHomography(H, ...s0);
+      const d1 = applyHomography(H, ...s1);
+      const d2 = applyHomography(H, ...s2);
+      octx.save();
+      octx.beginPath();
+      octx.moveTo(d0[0], d0[1]);
+      octx.lineTo(d1[0], d1[1]);
+      octx.lineTo(d2[0], d2[1]);
+      octx.closePath();
+      octx.clip();
+      octx.transform(...affineFromTriangles([s0, s1, s2], [d0, d1, d2]));
+      octx.drawImage(source, 0, 0);
+      octx.restore();
+    };
+
+    for (let j = 0; j < grid; j += 1) {
+      const sy0 = (j / grid) * h;
+      const sy1 = ((j + 1) / grid) * h;
+      for (let i = 0; i < grid; i += 1) {
+        const sx0 = (i / grid) * w;
+        const sx1 = ((i + 1) / grid) * w;
+        drawTri([sx0, sy0], [sx1, sy0], [sx1, sy1]);
+        drawTri([sx0, sy0], [sx1, sy1], [sx0, sy1]);
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Isolates the brightest pixels of `source` — the original wall's own
+   * shine, glare, and specular reflections — as their own translucent
+   * layer, everything else crushed toward transparent black. Done purely
+   * with CSS filters (an aggressive contrast push pulls mid-tones toward
+   * black while the brightest pixels survive with meaningful alpha), the
+   * same "no per-pixel loop" approach as the rest of this file. `strength`
+   * (0…100) controls how selective the cut is: low keeps only the hottest
+   * highlights, high lets more of the wall's midtone sheen through too.
+   * Meant to be drawn back on top of the edited result via "screen" (see
+   * _composite) so it reads as reflected light, not a flat white smear.
+   */
+  _extractHighlights(source, w, h, strength) {
+    const out = makeCanvas(w, h);
+    const octx = out.getContext("2d");
+    const contrastPct = 260 + strength * 5;   // steeper cut as strength rises
+    const brightnessAdj = 1.15 - strength / 220; // widen the surviving band a little
+    octx.filter = `brightness(${brightnessAdj}) contrast(${contrastPct}%)`;
+    octx.drawImage(source, 0, 0);
+    octx.filter = "none";
+    // Re-clip to the mask: the contrast push operates on the whole frame,
+    // including fully-transparent pixels outside it, some of which can
+    // land on non-zero RGB with zero alpha — drawImage of `source` again
+    // via destination-in guarantees nothing outside the mask survives.
+    octx.globalCompositeOperation = "destination-in";
+    octx.drawImage(source, 0, 0);
+    octx.globalCompositeOperation = "source-over";
+    return out;
+  }
+
+  /**
    * Outline every mask with a two-tone edge: a wide white halo under a
    * narrower accent-coloured line. A single thin accent line all but
    * vanished against green foliage, shadowed walls, or anything else close
@@ -890,29 +1173,52 @@ export class Compositor {
     const { width: w, height: h } = stage;
     const outerBand = Math.max(3, Math.round(Math.min(w, h) / 160));
     const innerBand = Math.max(1.5, Math.round(outerBand * 0.55));
+    const accent = getComputedStyle(document.documentElement).getPropertyValue("--mask").trim() || "#3f6b4a";
 
-    const erode = (ectx, mask, band, color) => {
-      ectx.drawImage(mask, 0, 0, w, h);
-      ectx.globalCompositeOperation = "destination-out";
+    /** The boundary ring at `band` pixels wide: `mask` minus its own
+     *  erosion by that many pixels. Erosion is computed as the mask
+     *  intersected (destination-in) with itself shifted in the 4 cardinal
+     *  directions — a pixel only survives if it's still covered after
+     *  every shift, i.e. genuinely `band` pixels clear of every edge.
+     *  (An earlier version subtracted the shifts instead of intersecting
+     *  them, which computes mask minus the *union* of those shifts — for
+     *  any shape wider than 2×band that union covers the entire interior
+     *  from one direction or another, so nothing ever survived. Consumed
+     *  the same "Show the mask edge" checkbox does nothing symptom.) */
+    const ringMask = (mask, band) => {
+      const { canvas: core, ctx: cctx } = this._scratchFor(3, w, h);
+      cctx.drawImage(mask, 0, 0, w, h);
+      cctx.globalCompositeOperation = "destination-in";
       for (const [dx, dy] of [[band, 0], [-band, 0], [0, band], [0, -band]]) {
-        ectx.drawImage(mask, dx, dy, w, h);
+        cctx.drawImage(mask, dx, dy, w, h);
       }
-      ectx.globalCompositeOperation = "source-in";
-      ectx.fillStyle = color;
-      ectx.fillRect(0, 0, w, h);
-      ectx.globalCompositeOperation = "source-over";
+      cctx.globalCompositeOperation = "source-over";
+
+      const { canvas: ring, ctx: rctx } = this._scratchFor(2, w, h);
+      rctx.drawImage(mask, 0, 0, w, h);
+      rctx.globalCompositeOperation = "destination-out";
+      rctx.drawImage(core, 0, 0, w, h);
+      rctx.globalCompositeOperation = "source-over";
+      return ring;
+    };
+
+    const tint = (ring, color) => {
+      const rctx = ring.getContext("2d");
+      rctx.globalCompositeOperation = "source-in";
+      rctx.fillStyle = color;
+      rctx.fillRect(0, 0, w, h);
+      rctx.globalCompositeOperation = "source-over";
+      return ring;
     };
 
     for (const layer of this.layers) {
-      const { canvas: halo, ctx: hctx } = this._scratchFor(2, w, h);
-      erode(hctx, layer.mask, outerBand, "#ffffff");
+      const halo = tint(ringMask(layer.mask, outerBand), "#ffffff");
       ctx.globalAlpha = 0.85;
       ctx.drawImage(halo, 0, 0);
 
-      // Same scratch slot, reused sequentially — halo has already been
+      // Same scratch slots, reused sequentially — halo has already been
       // drawn out to ctx by this point, nothing left in it to lose.
-      const { canvas: edge, ctx: ectx } = this._scratchFor(2, w, h);
-      erode(ectx, layer.mask, innerBand, "#3f6b4a");
+      const edge = tint(ringMask(layer.mask, innerBand), accent);
       ctx.globalAlpha = 1;
       ctx.drawImage(edge, 0, 0);
     }
@@ -938,6 +1244,72 @@ export class Compositor {
         quality,
       );
     });
+  }
+
+  /**
+   * A side-by-side Before/After image, full resolution: the untouched
+   * original on the left, the edited composite on the right, with a small
+   * label burned into each corner. Meant to be shared as its own picture —
+   * a client email, a social post — so the labels travel with it rather
+   * than depending on a UI the recipient never sees, the same reasoning
+   * toBlob() already follows for rendering fresh at scale 1 instead of
+   * upscaling the preview.
+   */
+  toBeforeAfterBlob({ type = "image/png", quality } = {}) {
+    if (!this.original) return Promise.reject(new Error("Nothing to export."));
+    const stage = this._buildStage(1);
+    const { width: w, height: h } = stage;
+
+    const after = makeCanvas(w, h);
+    this._composite(after.getContext("2d"), stage, { maskEdge: false });
+
+    const gap = Math.max(2, Math.round(w * 0.004));
+    const out = makeCanvas(w * 2 + gap, h);
+    const octx = out.getContext("2d");
+    octx.fillStyle = "#000";
+    octx.fillRect(0, 0, out.width, out.height);           // shows through the gap only
+    octx.drawImage(stage.base, 0, 0);
+    octx.drawImage(after, w + gap, 0);
+
+    this._labelCorner(octx, 0, h, w, "Before");
+    this._labelCorner(octx, w + gap, h, w, "After");
+
+    return new Promise((resolve, reject) => {
+      out.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error("The export could not be encoded."))),
+        type,
+        quality,
+      );
+    });
+  }
+
+  /** A small rounded, translucent pill with `text` in it, bottom-left of the
+   *  `halfWidth`-wide region starting at `x` — the same pill language as the
+   *  on-screen Before/After toggle, just baked into the exported pixels. */
+  _labelCorner(ctx, x, halfHeight, halfWidth, text) {
+    const pad = Math.max(10, Math.round(Math.min(halfWidth, halfHeight) * 0.018));
+    const fontSize = Math.max(16, Math.round(Math.min(halfWidth, halfHeight) * 0.024));
+    ctx.font = `700 ${fontSize}px system-ui, sans-serif`;
+    ctx.textBaseline = "middle";
+    const textW = ctx.measureText(text).width;
+    const boxW = textW + pad * 2.4;
+    const boxH = fontSize + pad * 1.3;
+    const bx = x + pad * 1.5;
+    const by = halfHeight - boxH - pad * 1.5;
+    const r = boxH / 2;
+
+    ctx.fillStyle = "rgba(10,13,11,.72)";
+    ctx.beginPath();
+    ctx.moveTo(bx + r, by);
+    ctx.arcTo(bx + boxW, by, bx + boxW, by + boxH, r);
+    ctx.arcTo(bx + boxW, by + boxH, bx, by + boxH, r);
+    ctx.arcTo(bx, by + boxH, bx, by, r);
+    ctx.arcTo(bx, by, bx + boxW, by, r);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = "#fff";
+    ctx.fillText(text, bx + pad * 1.2, by + boxH / 2 + 1);
   }
 
   /** Drop cached stages; call before loading a different photo. */

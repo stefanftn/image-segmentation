@@ -48,11 +48,8 @@
      toggleAuthed()). #authScreen's own data-view picks which of the three
      forms below is visible — plain CSS, same pattern as data-when above. -->
 <section class="authwrap" id="authScreen" data-view="login" aria-labelledby="authTitle">
-  <button type="button" class="iconbtn iconbtn--theme authwrap__theme" id="themeToggleAuth"
-          aria-pressed="true" data-i18n-attr="title:common.themeToggle" title="Switch theme">
-    <span class="themeicon themeicon--sun" aria-hidden="true">☀</span>
-    <span class="themeicon themeicon--moon" aria-hidden="true">☾</span>
-  </button>
+  <button type="button" class="iconbtn iconbtn--settings authwrap__theme" id="settingsToggleAuth"
+          data-i18n-attr="title:common.settings,aria-label:common.settings" title="Settings" aria-label="Settings">⚙</button>
   <div class="authcard">
     <div class="masthead__mark authcard__mark" aria-hidden="true">
       <span class="masthead__logo"></span>
@@ -137,18 +134,15 @@
     <h1>Maskwork</h1>
     <p data-i18n="masthead.subtitle">Find the wall, or pick the regions yourself. Repaint only those pixels.</p>
   </div>
-  <!-- Theme toggle: independent of body[data-state] and body.authed — a
-       display preference, not a step in the task flow. This one is hidden
-       along with the rest of .masthead while body isn't .authed (see
-       styles.css), which is why #authScreen has its own copy below
-       (#themeToggleAuth) for the signed-out screens. js/theme.js wires both
-       to the same html[data-theme] + localStorage and never touches
-       state.js's machine. -->
-  <button type="button" class="iconbtn iconbtn--theme masthead__theme" id="themeToggle"
-          aria-pressed="true" data-i18n-attr="title:common.themeToggle" title="Switch theme">
-    <span class="themeicon themeicon--sun" aria-hidden="true">☀</span>
-    <span class="themeicon themeicon--moon" aria-hidden="true">☾</span>
-  </button>
+  <!-- Settings: independent of body[data-state] and body.authed — a display
+       preference, not a step in the task flow. Hidden along with the rest
+       of .masthead while body isn't .authed (see styles.css), which is why
+       #authScreen has its own copy (#settingsToggleAuth) for the signed-out
+       screens, and the mobile sidebar has a third (#settingsToggleSidebar).
+       All three open the same #settingsDialog — see js/settings.js.
+       Positioned last/rightmost among the masthead buttons on purpose — see
+       the compound-selector note on .btn.masthead__reset in styles.css for
+       why only the *first* such button needs margin-left:auto. -->
   <!-- Relocated from beside Download/Add surface, where it read as one more
        option in that group — a destructive, session-ending action doesn't
        belong in a row of editing actions. Living in the masthead instead,
@@ -161,6 +155,10 @@
        something real to sign out of. -->
   <button type="button" class="btn btn--ghost masthead__reset" id="logoutBtn" hidden data-i18n="masthead.signOut">
     Sign out
+  </button>
+  <button type="button" class="btn btn--ghost masthead__reset masthead__settings" id="settingsToggle"
+          data-i18n-attr="title:common.settings,aria-label:common.settings" title="Settings" aria-label="Settings">
+    <span aria-hidden="true">⚙</span> <span data-i18n="common.settings">Settings</span>
   </button>
   <!-- Hamburger: mobile only (see styles.css, hidden above 980px). Opens
        #appSidebar — a shell for whatever gets added there next; today it
@@ -194,11 +192,8 @@
     <button type="button" class="appsidebar__item" id="sidebarNewPhoto">
       <span aria-hidden="true">↺</span> <span data-i18n="masthead.newPhoto">New photo</span>
     </button>
-    <button type="button" class="appsidebar__item iconbtn--theme" id="themeToggleSidebar"
-            aria-pressed="true">
-      <span class="themeicon themeicon--sun" aria-hidden="true">☀</span>
-      <span class="themeicon themeicon--moon" aria-hidden="true">☾</span>
-      <span data-i18n="common.themeToggle">Switch theme</span>
+    <button type="button" class="appsidebar__item" id="settingsToggleSidebar">
+      <span aria-hidden="true">⚙</span> <span data-i18n="common.settings">Settings</span>
     </button>
   </nav>
 
@@ -208,6 +203,46 @@
     <span data-i18n="masthead.signOut">Sign out</span>
   </button>
 </aside>
+
+<!-- Settings: one dialog, three doors in (masthead gear, auth-screen gear,
+     the hamburger sidebar's Settings row) — see js/settings.js. Reachable
+     whether signed in or not, since theme/language are client-side
+     preferences with nothing to do with an account. -->
+<div class="settingsbackdrop" id="settingsBackdrop" hidden></div>
+<div class="settingsdialog" id="settingsDialog" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" hidden>
+  <div class="settingsdialog__head">
+    <h2 id="settingsTitle" data-i18n="common.settings">Settings</h2>
+    <button type="button" class="iconbtn appsidebar__close" id="settingsClose"
+            data-i18n-attr="aria-label:common.closeSettings" aria-label="Close settings">✕</button>
+  </div>
+
+  <div class="settingsrow">
+    <div class="settingsrow__text">
+      <span class="settingsrow__label" id="settingsThemeLabel" data-i18n="common.appearance">Appearance</span>
+      <span class="settingsrow__hint" data-i18n="common.appearanceHint">Light or dark theme</span>
+    </div>
+    <div class="segmented" id="settingsThemeChoice" role="radiogroup" aria-labelledby="settingsThemeLabel">
+      <label>
+        <input type="radio" name="settingsTheme" value="light" id="settingsThemeLight" />
+        <span data-i18n="common.themeLight">Light</span>
+      </label>
+      <label>
+        <input type="radio" name="settingsTheme" value="dark" id="settingsThemeDark" />
+        <span data-i18n="common.themeDark">Dark</span>
+      </label>
+    </div>
+  </div>
+
+  <div class="settingsrow">
+    <div class="settingsrow__text">
+      <label class="settingsrow__label" for="settingsLanguage" data-i18n="common.language">Language</label>
+      <span class="settingsrow__hint" data-i18n="common.languageHint">Interface language</span>
+    </div>
+    <select class="select" id="settingsLanguage">
+      <option value="en">English</option>
+    </select>
+  </div>
+</div>
 
 <main class="workbench">
 
@@ -253,6 +288,23 @@
                else it's transparent to clicks (zoom, before/after, etc. keep
                working normally on the other tabs). -->
           <canvas id="maskDrawSurface" width="1" height="1" class="maskdraw"></canvas>
+
+          <!-- Perspective Warp: 4 draggable corners fitting a texture to the
+               wall's actual angle in the photo — see js/warp.js. Visible only
+               on the Adjust tab, and only once a texture is picked (nothing
+               to warp otherwise). The quad outline is SVG (tolerates the
+               non-uniform scaling a photo's own aspect ratio needs); the
+               handles are plain buttons so they stay perfectly round
+               regardless of that same scaling. -->
+          <svg class="warpoverlay" id="warpOverlay" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true" hidden>
+            <polygon id="warpQuad" class="warpoverlay__quad" points="0,0 1,0 1,1 0,1"></polygon>
+          </svg>
+          <div class="warphandles" id="warpHandles" aria-hidden="true" hidden>
+            <button type="button" class="warphandle" data-warp-index="0" style="left:0%;top:0%"></button>
+            <button type="button" class="warphandle" data-warp-index="1" style="left:100%;top:0%"></button>
+            <button type="button" class="warphandle" data-warp-index="2" style="left:100%;top:100%"></button>
+            <button type="button" class="warphandle" data-warp-index="3" style="left:0%;top:100%"></button>
+          </div>
 
           <div class="comparebox" id="comparebox" hidden>
             <canvas id="beforeCanvas" width="1" height="1"></canvas>
@@ -390,8 +442,12 @@
       <p class="note" id="reuseNote" hidden data-i18n="jobForm.reuseNote">
         Using the photo already loaded — no re-upload.
       </p>
-      <p class="note" data-i18n="jobForm.sizeNote">
-        Size and type are checked here for speed. The server checks again, and its answer is the one that counts.
+      <p class="note">
+        <span class="infotip">
+          <button type="button" class="infotip__icon" data-i18n-attr="aria-label:common.moreInfo" aria-label="More info"></button>
+          <span class="infotip__bubble" role="tooltip" data-i18n="jobForm.sizeNote">Size and type are checked here for speed. The server checks again, and its answer is the one that counts.</span>
+        </span>
+        <span data-i18n="jobForm.sizeNoteLabel">Why this gets checked twice</span>
       </p>
 
       <div class="resume">
@@ -399,9 +455,12 @@
           Resume an earlier session
         </button>
         <div class="resumepanel" id="resumePanel" hidden>
-          <p class="note" id="resumeNote" data-i18n="jobForm.resumeNote">
-            Opening a job here brings back the photo, the mask or regions, and every
-            saved selection — no need to pick the photo again.
+          <p class="note" id="resumeNote">
+            <span class="infotip">
+              <button type="button" class="infotip__icon" data-i18n-attr="aria-label:common.moreInfo" aria-label="More info"></button>
+              <span class="infotip__bubble" role="tooltip" data-i18n="jobForm.resumeNote">Opening a job here brings back the photo, the mask or regions, and every saved selection — no need to pick the photo again.</span>
+            </span>
+            <span data-i18n="jobForm.resumeNoteLabel">What resuming brings back</span>
           </p>
           <div class="resume__head">
             <span data-i18n="jobForm.resumeHeading">Your recent jobs</span>
@@ -543,6 +602,7 @@
         <button type="button" class="edittab" data-edittab-btn="color" role="tab" aria-selected="false" data-i18n="edit.tabColor">Colour</button>
         <button type="button" class="edittab" data-edittab-btn="adjust" role="tab" aria-selected="false" data-i18n="edit.tabAdjust">Adjust</button>
         <button type="button" class="edittab" data-edittab-btn="mask" role="tab" aria-selected="false" data-i18n="edit.tabMask">Mask</button>
+        <button type="button" class="edittab" data-edittab-btn="export" role="tab" aria-selected="false" data-i18n="edit.tabExport">Export</button>
       </div>
 
       <div class="edittabbody" id="editTabbody">
@@ -580,9 +640,53 @@
                   <span class="infotip__bubble" role="tooltip" data-i18n="edit.intensityHint">Colour applies as a flat, full colour at 100%. Lower the intensity to blend it back toward the original.</span>
                 </span>
               </span>
-              <output id="tintStrengthReadout">100%</output>
+              <span class="numfield"><input type="number" id="tintStrengthReadout" class="numinput" min="0" max="100" step="1" value="100" aria-label="Colour intensity" /><span class="numunit">%</span></span>
             </div>
             <input type="range" id="tintStrength" min="0" max="100" step="1" value="100" />
+          </div>
+
+          <div class="control">
+            <div class="control__head">
+              <span class="control__label">
+                <label id="blendModeLabel" data-i18n="edit.blendModeLabel">Blend mode</label>
+                <span class="infotip">
+                  <button type="button" class="infotip__icon" data-i18n-attr="aria-label:common.moreInfo" aria-label="More info"></button>
+                  <span class="infotip__bubble" role="tooltip" data-i18n="edit.blendModeHint">How the new colour meets the wall underneath. Normal is a flat, literal colour. Multiply, Soft Light, and Overlay let the original's own shading and texture show back through.</span>
+                </span>
+              </span>
+            </div>
+            <div class="segmented segmented--grid2" id="blendModeChoice" role="radiogroup" aria-labelledby="blendModeLabel">
+              <label>
+                <input type="radio" name="blendMode" value="normal" id="blendModeNormal" checked />
+                <span data-i18n="edit.blendNormal">Normal</span>
+              </label>
+              <label>
+                <input type="radio" name="blendMode" value="multiply" id="blendModeMultiply" />
+                <span data-i18n="edit.blendMultiply">Multiply</span>
+              </label>
+              <label>
+                <input type="radio" name="blendMode" value="soft-light" id="blendModeSoftLight" />
+                <span data-i18n="edit.blendSoftLight">Soft Light</span>
+              </label>
+              <label>
+                <input type="radio" name="blendMode" value="overlay" id="blendModeOverlay" />
+                <span data-i18n="edit.blendOverlay">Overlay</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="control">
+            <div class="control__head">
+              <span class="control__label">
+                <label for="specular" data-i18n="edit.specularLabel">Specular highlights</label>
+                <span class="infotip">
+                  <button type="button" class="infotip__icon" data-i18n-attr="aria-label:common.moreInfo" aria-label="More info"></button>
+                  <span class="infotip__bubble" role="tooltip" data-i18n="edit.specularHint">Keeps the wall's own shine and light reflections visible on top of the new colour or texture, for a more photorealistic finish.</span>
+                </span>
+              </span>
+              <span class="numfield"><input type="number" id="specularReadout" class="numinput" min="0" max="100" step="1" value="0" aria-label="Specular highlights" /><span class="numunit">%</span></span>
+            </div>
+            <input type="range" id="specular" min="0" max="100" step="1" value="0" />
           </div>
         </div>
 
@@ -590,7 +694,7 @@
           <div class="control control--first">
             <div class="control__head">
               <label for="hue" data-i18n="edit.hueLabel">Hue shift</label>
-              <output id="hueReadout">0°</output>
+              <span class="numfield"><input type="number" id="hueReadout" class="numinput" min="-180" max="180" step="1" value="0" aria-label="Hue shift" /><span class="numunit">°</span></span>
             </div>
             <input type="range" id="hue" min="-180" max="180" step="1" value="0" />
           </div>
@@ -598,7 +702,7 @@
           <div class="control">
             <div class="control__head">
               <label for="sat" data-i18n="edit.satLabel">Saturation</label>
-              <output id="satReadout">100%</output>
+              <span class="numfield"><input type="number" id="satReadout" class="numinput" min="0" max="250" step="1" value="100" aria-label="Saturation" /><span class="numunit">%</span></span>
             </div>
             <input type="range" id="sat" min="0" max="250" step="1" value="100" />
           </div>
@@ -611,7 +715,7 @@
             <div class="textures" id="textures" role="group" aria-labelledby="texLabel"></div>
             <div class="control__head control__head--sub">
               <label for="texStrength" data-i18n="edit.texStrengthLabel">Texture strength</label>
-              <output id="texStrengthReadout">70%</output>
+              <span class="numfield"><input type="number" id="texStrengthReadout" class="numinput" min="0" max="100" step="1" value="70" aria-label="Texture strength" /><span class="numunit">%</span></span>
             </div>
             <input type="range" id="texStrength" min="0" max="100" step="1" value="70" />
             <div class="control__head control__head--sub">
@@ -622,7 +726,7 @@
                   <span class="infotip__bubble" role="tooltip" data-i18n="edit.texRotationHint">Turn the tile to match the angle of the wall.</span>
                 </span>
               </span>
-              <output id="texRotationReadout">0°</output>
+              <span class="numfield"><input type="number" id="texRotationReadout" class="numinput" min="-180" max="180" step="1" value="0" aria-label="Texture rotation" /><span class="numunit">°</span></span>
             </div>
             <input type="range" id="texRotation" min="-180" max="180" step="1" value="0" />
             <div class="control__head control__head--sub">
@@ -633,9 +737,20 @@
                   <span class="infotip__bubble" role="tooltip" data-i18n="edit.texDepthHint">One side closer, the other farther — for a wall photographed at an angle.</span>
                 </span>
               </span>
-              <output id="texDepthReadout">0</output>
+              <span class="numfield"><input type="number" id="texDepthReadout" class="numinput" min="-100" max="100" step="1" value="0" aria-label="Texture depth" /></span>
             </div>
             <input type="range" id="texDepth" min="-100" max="100" step="1" value="0" />
+          </div>
+
+          <div class="control control__toggles">
+            <span class="control__label">
+              <label data-i18n="edit.warpLabel">Perspective warp</label>
+              <span class="infotip">
+                <button type="button" class="infotip__icon" data-i18n-attr="aria-label:common.moreInfo" aria-label="More info"></button>
+                <span class="infotip__bubble" role="tooltip" data-i18n="edit.warpHint">Drag the four corner handles on the photo to fit the texture to the wall's actual angle — a real perspective fit, not just a slider.</span>
+              </span>
+            </span>
+            <button type="button" class="linkbtn" id="resetWarp" data-i18n="edit.warpReset">Reset warp</button>
           </div>
 
           <div class="control control__toggles">
@@ -673,7 +788,7 @@
           <div class="control">
             <div class="control__head">
               <label for="brushSize" data-i18n="edit.brushSizeLabel">Brush size</label>
-              <output id="brushSizeReadout">40px</output>
+              <span class="numfield"><input type="number" id="brushSizeReadout" class="numinput" min="4" max="160" step="1" value="40" aria-label="Brush size" /><span class="numunit">px</span></span>
             </div>
             <input type="range" id="brushSize" min="4" max="160" step="1" value="40" />
           </div>
@@ -689,15 +804,90 @@
             </span>
           </div>
 
+          <div class="control">
+            <div class="control__head">
+              <span class="control__label">
+                <label for="growShrink" data-i18n="edit.growShrinkLabel">Grow / Shrink</label>
+                <span class="infotip">
+                  <button type="button" class="infotip__icon" data-i18n-attr="aria-label:common.moreInfo" aria-label="More info"></button>
+                  <span class="infotip__bubble" role="tooltip" data-i18n="edit.growShrinkHint">Pushes the mask's edge out or pulls it in by a number of pixels — quick way to clear a thin sliver of wall the selection missed, or pull back from something it caught by mistake.</span>
+                </span>
+              </span>
+              <span class="numfield"><input type="number" id="growShrinkReadout" class="numinput" min="-60" max="60" step="1" value="0" aria-label="Grow / Shrink" /><span class="numunit">px</span></span>
+            </div>
+            <input type="range" id="growShrink" min="-60" max="60" step="1" value="0" />
+          </div>
+
+          <div class="control">
+            <div class="control__head">
+              <span class="control__label">
+                <label for="feather" data-i18n="edit.featherLabel">Feather</label>
+                <span class="infotip">
+                  <button type="button" class="infotip__icon" data-i18n-attr="aria-label:common.moreInfo" aria-label="More info"></button>
+                  <span class="infotip__bubble" role="tooltip" data-i18n="edit.featherHint">Softens the mask's edge into a gradual blend instead of a hard cut — smooths a harsh line at the ceiling or floor and helps colour or texture fade naturally into the untouched photo.</span>
+                </span>
+              </span>
+              <span class="numfield"><input type="number" id="featherReadout" class="numinput" min="0" max="100" step="1" value="0" aria-label="Feather" /><span class="numunit">%</span></span>
+            </div>
+            <input type="range" id="feather" min="0" max="100" step="1" value="0" />
+          </div>
+
           <p class="hint" data-i18n="edit.brushDrawHint">Draw directly on the photo above to fine-tune the mask. Undo/redo (top-left of the photo) covers every stroke.</p>
         </div>
-      </div>
 
-      <div class="btnrow btnrow--stack editcard__export">
-        <button type="button" class="btn btn--primary" id="exportBtn">
-          <span class="btn__spinner" aria-hidden="true"></span>
-          <span class="btn__label" data-i18n="edit.download">Download PNG</span>
-        </button>
+        <div class="editpanel" data-edittab-panel="export" role="tabpanel" hidden>
+          <div class="control control--first">
+            <div class="control__head">
+              <span class="control__label">
+                <label data-i18n="edit.exportFinalLabel">Final image</label>
+              </span>
+            </div>
+            <p class="hint" data-i18n="edit.exportFinalHint">The photo with every edit applied, at full resolution.</p>
+            <div class="btnrow btnrow--stack">
+              <button type="button" class="btn btn--primary" id="exportBtn">
+                <span class="btn__spinner" aria-hidden="true"></span>
+                <span class="btn__label" data-i18n="edit.download">Download PNG</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="control">
+            <div class="control__head">
+              <span class="control__label">
+                <label data-i18n="edit.exportCompareLabel">Before / After</label>
+                <span class="infotip">
+                  <button type="button" class="infotip__icon" data-i18n-attr="aria-label:common.moreInfo" aria-label="More info"></button>
+                  <span class="infotip__bubble" role="tooltip" data-i18n="edit.exportCompareHint">One image, the original and the edited version side by side at full resolution — ready to send to a client or post.</span>
+                </span>
+              </span>
+            </div>
+            <div class="btnrow btnrow--stack">
+              <button type="button" class="btn btn--quiet" id="exportCompareBtn">
+                <span class="btn__spinner" aria-hidden="true"></span>
+                <span class="btn__label" data-i18n="edit.downloadCompare">Download Before/After</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="control">
+            <div class="control__head">
+              <span class="control__label">
+                <label data-i18n="edit.exportMaskLabel">Mask</label>
+                <span class="infotip">
+                  <button type="button" class="infotip__icon" data-i18n-attr="aria-label:common.moreInfo" aria-label="More info"></button>
+                  <span class="infotip__bubble" role="tooltip" data-i18n="edit.exportMaskHint">The selected surface on its own, white on a transparent background — for touching up in Photoshop or GIMP.</span>
+                </span>
+              </span>
+            </div>
+            <p class="hint" data-i18n="edit.exportMaskNote">Exports whichever surface is selected in the Surfaces tab.</p>
+            <div class="btnrow btnrow--stack">
+              <button type="button" class="btn btn--quiet" id="exportMaskBtn">
+                <span class="btn__spinner" aria-hidden="true"></span>
+                <span class="btn__label" data-i18n="edit.downloadMask">Download mask (PNG)</span>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   </aside>
@@ -710,6 +900,7 @@
 <script type="module" src="js/edittabs.js"></script>
 <script type="module" src="js/sidebar.js"></script>
 <script type="module" src="js/infotip.js"></script>
+<script type="module" src="js/settings.js"></script>
 <script type="module" src="js/app.js"></script>
 </body>
 </html>
