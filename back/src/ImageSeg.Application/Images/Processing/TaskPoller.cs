@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Prometheus;
 
 namespace ImageSeg.Application.Images.Processing;
 
@@ -28,6 +29,20 @@ namespace ImageSeg.Application.Images.Processing;
 /// </summary>
 public sealed class TaskPoller : BackgroundService
 {
+    // Static (not per-instance): every "web" replica registers into the same process-wide
+    // DefaultRegistry that prometheus-net.AspNetCore's MapMetrics() serves from Program.cs.
+    // Per replica, each replica's own /metrics naturally reports only that replica's counts -
+    // Prometheus does the summing across replicas at query time (sum(imageseg_taskpoller_claimed_total)),
+    // same pattern as the ai-sidecar's SEGMENT_REQUESTS counter.
+    private static readonly Counter ClaimedTotal = Metrics.CreateCounter(
+        "imageseg_taskpoller_claimed_total", "Tasks claimed off the Pending queue by this replica.");
+
+    private static readonly Counter ClaimCycleErrorsTotal = Metrics.CreateCounter(
+        "imageseg_taskpoller_claim_cycle_errors_total", "Claim cycles that threw before completing.");
+
+    private static readonly Gauge InFlightTasks = Metrics.CreateGauge(
+        "imageseg_inflight_tasks", "Tasks currently occupying an InFlightLimiter permit on this replica (active sidecar calls).");
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly InFlightLimiter _limiter;
     private readonly PollerOptions _pollerOptions;
@@ -63,6 +78,8 @@ public sealed class TaskPoller : BackgroundService
                 // §4.3 backpressure: the direct-Postgres equivalent of pausing Kafka partition
                 // consumption - skip a poll cycle instead of claiming work this instance has
                 // no capacity to act on soon.
+                InFlightTasks.Set(_limiter.Capacity - _limiter.Semaphore.CurrentCount);
+
                 if (_limiter.Semaphore.CurrentCount == 0)
                 {
                     await Task.Delay(_pollerOptions.BackpressurePollIntervalMs, stoppingToken);
@@ -86,6 +103,7 @@ public sealed class TaskPoller : BackgroundService
                     continue;
                 }
 
+                ClaimedTotal.Inc(claimed.Count);
                 _logger.LogDebug("Claimed {Count} task(s).", claimed.Count);
 
                 // Fire-and-forget per claimed task: each gets its own DI scope (fresh
@@ -103,6 +121,7 @@ public sealed class TaskPoller : BackgroundService
             }
             catch (Exception ex)
             {
+                ClaimCycleErrorsTotal.Inc();
                 _logger.LogError(ex, "TaskPoller claim cycle failed; will retry on the next cycle.");
                 await Task.Delay(_pollerOptions.EmptyPollIntervalMs, stoppingToken);
             }

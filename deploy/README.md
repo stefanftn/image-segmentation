@@ -1,8 +1,9 @@
 # Deploy — self-hosted runner, isolated under `moleraj`'s rootless Docker
 
-Three independent pipelines (`.github/workflows/{backend,ai-sidecar,frontend}.yml`), each
-reacting only to changes in its own part of the code, each building its image directly on the
-VM (no registry involved) and restarting only that one service.
+Four independent pipelines (`.github/workflows/{backend,ai-sidecar,frontend,monitoring}.yml`), each
+reacting only to changes in its own part of the code and restarting only its own service(s).
+Backend/ai-sidecar/frontend each build their image directly on the VM (no registry involved);
+monitoring has no build step - `prom/prometheus` and `grafana/grafana` are plain upstream images.
 
 **The entire pipeline runs as the `moleraj` Linux user, inside its own isolated rootless
 Docker** — fully separate from the root Docker daemon that runs `reverse-proxy` (and, through
@@ -68,8 +69,12 @@ git clone https://github.com/<owner>/<repo>.git ~/imageseg
 ## 4. Add nginx routing (on the root side, outside the `moleraj` user)
 
 See `deploy/nginx-additions.conf` for exactly what changes (the existing `moleraj` `location /`
-block splits into three) and what's new (a whole new `minio.stefanpopovic.site` block). Run as
-whichever user has access to `/opt/reverse-proxy/`:
+block splits into four: `/monitoring/`, `/api/`, `/hubs/`, `/`) and what's new (a whole new
+`minio.stefanpopovic.site` block). Grafana does **not** get its own subdomain — it's nested
+under the existing `moleraj.stefanpopovic.site` origin, at its own top-level path `/monitoring/`
+(a sibling of `/api/`, not inside it — nesting it under `/api/` would blur the line between the
+real REST API and a monitoring UI). Reuses the existing subdomain/certificate, no new DNS record.
+Run as whichever user has access to `/opt/reverse-proxy/`:
 
 ```bash
 nano /opt/reverse-proxy/conf.d/default.conf
@@ -86,7 +91,8 @@ minio.stefanpopovic.site   A   VPS_PUBLIC_IP
 ```
 
 The wildcard certificate (`*.stefanpopovic.site`) already covers this — no new certificate
-needed, just the DNS record.
+needed, just the DNS record. Monitoring needs **no DNS change at all** — it lives at
+`moleraj.stefanpopovic.site/monitoring/`, an existing hostname.
 
 ## 6. First deploy, by hand
 
@@ -113,6 +119,31 @@ restarts only that one service.
 | 4002 / 4003 | Ketering app / API |
 | 4004 | ImageSeg frontend |
 | 4005 | MinIO S3 API, public via `minio.stefanpopovic.site` |
+| 4006 | Grafana, public via `moleraj.stefanpopovic.site/monitoring/` (see below) |
+
+## Monitoring (Prometheus/Grafana)
+
+Optional layer on top of the spec §11 four-service target — nothing else `depends_on` these two,
+so the app runs fine without them. Deployed by its own workflow (`.github/workflows/monitoring.yml`),
+same pattern as backend/ai-sidecar/frontend, triggered by changes under `deploy/monitoring/**`
+(scrape config, Grafana provisioning). It does **not** trigger on changes elsewhere in
+`deploy/docker-compose.prod.yml` (e.g. bumping the `prom/prometheus`/`grafana/grafana` image tag)
+since that file is shared by every service — for that one case, run
+`workflow_dispatch` by hand (GitHub repo → Actions → Monitoring — deploy → Run workflow) or SSH in
+and run the two `docker compose` commands from the workflow yourself.
+
+- **Prometheus** scrapes `web:8080/metrics` (prometheus-net.AspNetCore — HTTP request metrics
+  plus `imageseg_taskpoller_claimed_total`, `imageseg_inflight_tasks`,
+  `imageseg_sweeper_force_failed_total`) and `ai-sidecar:8000/metrics` (already instrumented —
+  `sidecar_segment_latency_seconds`, `sidecar_model_ready{model}`, etc.). It is **not** published
+  on any host port — only Grafana talks to it, over the internal `imageseg` Docker network.
+- **Grafana** is reachable at `https://moleraj.stefanpopovic.site/monitoring/` once step 4's
+  nginx block is applied. First login is `GRAFANA_ADMIN_USER`/`GRAFANA_ADMIN_PASSWORD` from
+  `~/imageseg-secrets/.env` — the latter has no built-in default in
+  `deploy/docker-compose.prod.yml`, so it must actually be set there before the first `up`.
+  Prometheus is pre-wired as its datasource (`deploy/monitoring/grafana-provisioning/`); drop a
+  dashboard JSON into `deploy/monitoring/grafana-provisioning/dashboards/` (see that folder's
+  README for two ready-made community dashboards) and Grafana picks it up within 30s, no restart.
 
 ## Why frontend and backend share an origin, and MinIO doesn't
 

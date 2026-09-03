@@ -1,6 +1,7 @@
 # =============================================================================
-# Four-service target (spec §11): web, postgres, ai-sidecar, minio(+minio-init).
-# No Kafka, no Redis, no gateway/YARP, no FTP, no Prometheus/Grafana.
+# Four-service target (spec §11): web, postgres, ai-sidecar, minio(+minio-init), plus an
+# optional monitoring pair (prometheus, grafana) added on top - see the two services below for
+# why. No Kafka, no Redis, no gateway/YARP, no FTP.
 #
 # EVERY credential and per-environment value lives in deploy/.env, not in this file - copy
 # deploy/.env.example to deploy/.env and fill it in before the first run:
@@ -172,6 +173,40 @@ services:
     restart: unless-stopped
     networks: [imageseg]
 
+  # ------------------------------------------------------------------------------ monitoring
+  # Optional on top of the spec §11 four-service target - neither "web" nor "ai-sidecar" depend
+  # on these, so `docker compose up` without them still starts a fully working app. ai-sidecar
+  # was already instrumented (main.py's SEGMENT_REQUESTS/REGIONS_REQUESTS/MODEL_READY, kept from
+  # the original stub sidecar); "web" now exposes the same shape via prometheus-net.AspNetCore
+  # (see Program.cs's UseHttpMetrics()/MapMetrics() and TaskPoller/StaleTaskSweeperWorker's
+  # custom Counters/Gauges). This scrapes both.
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: imageseg-prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks: [imageseg]
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: imageseg-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana-provisioning:/etc/grafana/provisioning:ro
+    ports:
+      # Local dev only - plain root path, no reverse proxy, no sub-path config needed.
+      # Production instead nests this under moleraj.stefanpopovic.site/api/monitoring/ (see
+      # deploy/docker-compose.prod.yml and deploy/nginx-additions.conf) rather than publishing
+      # a port directly.
+      - "3001:3000"
+    depends_on: [prometheus]
+    networks: [imageseg]
+
   # ------------------------------------------------------- one-shot migration job (spec §12)
   migrate:
     build:
@@ -219,3 +254,5 @@ volumes:
   postgres-data:
   minio-data:
   ai-sidecar-model-cache:
+  prometheus-data:
+  grafana-data:

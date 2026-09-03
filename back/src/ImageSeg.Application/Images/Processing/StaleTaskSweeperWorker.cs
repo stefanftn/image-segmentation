@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Prometheus;
 
 namespace ImageSeg.Application.Images.Processing;
 
@@ -17,6 +18,12 @@ namespace ImageSeg.Application.Images.Processing;
 /// </summary>
 public sealed class StaleTaskSweeperWorker : BackgroundService
 {
+    // A non-zero rate here is exactly the signal that something upstream is silently hanging
+    // (a sidecar timeout not actually being hit, a crash between two state writes) - worth its
+    // own metric rather than only living in a WARN log line.
+    private static readonly Counter SweptTotal = Metrics.CreateCounter(
+        "imageseg_sweeper_force_failed_total", "Tasks force-failed by StaleTaskSweeperWorker for exceeding MaxTaskDurationMinutes.");
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly SweeperOptions _options;
     private readonly ILogger<StaleTaskSweeperWorker> _logger;
@@ -61,6 +68,9 @@ public sealed class StaleTaskSweeperWorker : BackgroundService
             TimeSpan.FromMinutes(_options.MaxTaskDurationMinutes), _options.BatchSize, ct);
 
         if (affected > 0)
+        {
+            SweptTotal.Inc(affected);
             _logger.LogWarning("Force-failed {Count} tasks stuck beyond {Minutes} minutes.", affected, _options.MaxTaskDurationMinutes);
+        }
     }
 }

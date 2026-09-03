@@ -152,6 +152,49 @@ services:
       - "4001:80"
     networks: [imageseg]
 
+  # ------------------------------------------------------------------------------ monitoring
+  # Not exposed on any host port - Grafana is the only thing the outside world can reach (via
+  # the reverse proxy, see deploy/nginx-additions.conf's new /monitoring/ location), and it
+  # talks to this over the internal "imageseg" network, same as every other service-to-service
+  # call in this stack.
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: imageseg-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks: [imageseg]
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: imageseg-grafana
+    restart: unless-stopped
+    environment:
+      # Nested under the existing moleraj.stefanpopovic.site origin at /monitoring/ - its own
+      # top-level path segment, sibling to /api/, /hubs/, and / (not inside /api/, which is the
+      # real REST API and would be confusing to share with a monitoring UI). Reuses the existing
+      # subdomain/certificate; only a new nginx location, no new DNS record.
+      # Both variables are required for Grafana's own links/redirects/asset URLs to come out
+      # correct under that sub-path - see https://grafana.com/tutorials/run-grafana-behind-a-proxy/.
+      GF_SERVER_ROOT_URL: "https://moleraj.stefanpopovic.site/monitoring/"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_SECURITY_ADMIN_USER: "${GRAFANA_ADMIN_USER:-admin}"
+      # No ${...:-admin} fallback, deliberately, unlike dev's docker-compose.yml - Grafana is
+      # reachable from the public internet here (behind the reverse proxy), so an unset password
+      # must fail loudly rather than silently start with the well-known default.
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD}"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana-provisioning:/etc/grafana/provisioning:ro
+    ports:
+      # Published the same way "minio" is (see its own comment above) so root Nginx - a
+      # separate Docker daemon entirely - can reach it via host.docker.internal:4006.
+      - "4006:3000"
+    depends_on: [prometheus]
+    networks: [imageseg]
+
 networks:
   imageseg:
     driver: bridge
@@ -160,4 +203,6 @@ volumes:
   postgres-data:
   minio-data:
   ai-sidecar-model-cache:
+  prometheus-data:
+  grafana-data:
     

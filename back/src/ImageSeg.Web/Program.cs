@@ -16,6 +16,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.HttpOverrides;
+using Prometheus;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -236,6 +237,13 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<CorrelationIdMiddleware>(); // spec §9 - first in the pipeline
 app.UseForwardedHeaders();
 
+// HTTP request metrics (imageseg_web request count/duration by method/code/route). As early as
+// possible so timing covers the whole pipeline, not just what runs after it. Deliberately NOT
+// gated behind CORS/auth: /metrics is scraped by Prometheus over the internal "imageseg" Docker
+// network only (see deploy/docker-compose*.yml) - it is never reachable through the public
+// reverse proxy, which has no location block for it (only /api/, /hubs/, and / are routed).
+app.UseHttpMetrics();
+
 app.UseCors();
 
 app.UseAuthentication();
@@ -248,6 +256,12 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.MapHub<TaskStatusHub>("/hubs/tasks");
+
+// Process/GC/thread-pool metrics (dotnet_*) alongside the HTTP metrics from UseHttpMetrics()
+// above and the custom Counters/Gauges TaskPoller and StaleTaskSweeperWorker register into the
+// same DefaultRegistry. One combined exposition, scraped by Prometheus' "imageseg-web" job.
+DotNetStats.Register(Metrics.DefaultRegistry);
+app.MapMetrics();
 
 app.Run();
 

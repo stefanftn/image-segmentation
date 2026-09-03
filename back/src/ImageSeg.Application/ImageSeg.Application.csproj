@@ -19,6 +19,11 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
     <PackageReference Include="Polly.Core" Version="8.5.0" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.11" />
+    <!-- Core-only package (no ASP.NET Core dependency) - Application has no business exposing
+         an HTTP endpoint, it only needs to register/update Counters and Gauges. The actual
+         `/metrics` endpoint is mapped in ImageSeg.Web via prometheus-net.AspNetCore, which
+         depends on this same package so both sides share one MetricFactory/DefaultRegistry. -->
+    <PackageReference Include="prometheus-net" Version="8.2.1" />
   </ItemGroup>
 
 </Project>

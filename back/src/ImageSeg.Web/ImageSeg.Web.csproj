@@ -21,6 +21,10 @@
     <PackageReference Include="Microsoft.AspNetCore.Authentication.Google" Version="9.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
+    <!-- HTTP request metrics (UseHttpMetrics) + the /metrics scrape endpoint (MapMetrics) -
+         see Program.cs. Pulls in prometheus-net (core) transitively, the same package
+         Application references directly for its own Counters/Gauges. -->
+    <PackageReference Include="prometheus-net.AspNetCore" Version="8.2.1" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

@@ -99,8 +99,13 @@ public sealed class InFlightLimiter
 {
     public SemaphoreSlim Semaphore { get; }
 
+    /// <summary>Total permits the semaphore was created with - needed to turn its
+    /// CurrentCount (free permits) into "active" for the imageseg_inflight_tasks gauge.</summary>
+    public int Capacity { get; }
+
     public InFlightLimiter(IOptions<ProcessorOptions> options)
     {
-        Semaphore = new SemaphoreSlim(options.Value.MaxInFlightPerInstance, options.Value.MaxInFlightPerInstance);
+        Capacity = options.Value.MaxInFlightPerInstance;
+        Semaphore = new SemaphoreSlim(Capacity, Capacity);
     }
 }

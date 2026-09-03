@@ -1,0 +1,50 @@
+name: Monitoring — deploy
+
+# Fourth independent pipeline, same pattern as backend/ai-sidecar/frontend (see
+# deploy/README.md's intro). Deliberately separate from backend.yml even though both read
+# deploy/docker-compose.prod.yml: that file is shared by every service, so folding this into
+# backend.yml would mean an unrelated backend change (which only needs `up -d web`) also
+# restarts prometheus/grafana, and - the other direction - a monitoring-only change would never
+# trigger backend.yml at all, since its path filters don't include deploy/monitoring/**.
+#
+# Known gap: path filters are file-level, not YAML-key-level. Editing docker-compose.prod.yml
+# itself (e.g. bumping the grafana/prometheus image tag) is NOT covered by the filters below,
+# because that file also defines web/postgres/minio/ai-sidecar and this workflow must not fire
+# on every unrelated edit to it. For that one case, deploy by hand or use workflow_dispatch.
+#
+# prom/prometheus and grafana/grafana are plain upstream images - no `docker build` step here,
+# unlike the other three workflows.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "deploy/monitoring/**"
+      - ".github/workflows/monitoring.yml"
+
+concurrency:
+  group: monitoring-deploy
+  cancel-in-progress: false
+
+env:
+  ENV_FILE: /home/moleraj/imageseg-secrets/.env
+  COMPOSE_FILE: deploy/docker-compose.prod.yml
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, moleraj]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start prometheus/grafana (first run) and reload config (every run)
+        # `up -d` alone only creates the containers if missing or if their own compose
+        # definition (image, env, ports) changed - it does NOT restart them just because a
+        # bind-mounted file's *content* changed (deploy/monitoring/prometheus.yml, the Grafana
+        # datasource/dashboard provisioning). `restart` right after forces both to pick up
+        # whatever this push actually changed, every time, even on a no-op `up -d`.
+        run: |
+          docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d prometheus grafana
+          docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" restart prometheus grafana
+
+      - name: Prune dangling images
+        run: docker image prune -f
