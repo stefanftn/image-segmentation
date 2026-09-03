@@ -196,9 +196,23 @@ builder.Services.AddCors(options =>
 });
 
 // ---- Rate limiting (spec §9) - two tiers: tight for writes, looser for reads ---------------
+var rateLimitRejectionsTotal = Metrics.CreateCounter(
+    "imageseg_rate_limit_rejections_total", "429s returned by the rate limiter.", "policy");
+
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    // Which named policy actually rejected the request - EnableRateLimitingAttribute is how
+    // controllers opt into "writes"/"reads" (spec §9), so its PolicyName is the same string
+    // AddPolicy below registers under.
+    options.OnRejected = (context, _) =>
+    {
+        var policyName = context.HttpContext.GetEndpoint()?.Metadata
+            .GetMetadata<Microsoft.AspNetCore.RateLimiting.EnableRateLimitingAttribute>()?.PolicyName ?? "unknown";
+        rateLimitRejectionsTotal.WithLabels(policyName).Inc();
+        return ValueTask.CompletedTask;
+    };
 
     options.AddPolicy("writes", context => RateLimitPartition.GetFixedWindowLimiter(
         PartitionKey(context),

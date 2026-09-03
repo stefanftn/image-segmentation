@@ -175,6 +175,9 @@ public sealed class ImageTaskRepository : IImageTaskRepository
         return task;
     }
 
+    public Task<int> CountPendingAsync(CancellationToken ct)
+        => _db.ImageTasks.AsNoTracking().CountAsync(t => t.State == ImageTaskState.Pending, ct);
+
     private static bool IsUniqueViolation(DbUpdateException ex)
         => ex.InnerException is PostgresException { SqlState: "23505" };
 }

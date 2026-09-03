@@ -2,6 +2,9 @@ apiVersion: 1
 
 datasources:
   - name: Prometheus
+    # Fixed uid so provisioned dashboards (grafana-provisioning/dashboards/*.json) can
+    # reference this datasource by a stable id instead of Grafana's randomly-generated one.
+    uid: imageseg-prometheus
     type: prometheus
     access: proxy
     url: http://prometheus:9090

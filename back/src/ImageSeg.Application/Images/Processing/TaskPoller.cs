@@ -43,6 +43,15 @@ public sealed class TaskPoller : BackgroundService
     private static readonly Gauge InFlightTasks = Metrics.CreateGauge(
         "imageseg_inflight_tasks", "Tasks currently occupying an InFlightLimiter permit on this replica (active sidecar calls).");
 
+    private static readonly Gauge PendingTasks = Metrics.CreateGauge(
+        "imageseg_pending_tasks", "Actual Pending-state backlog in Postgres right now (the real queue depth, not just this replica's batch size).");
+
+    // CountPendingAsync is a plain COUNT(*) - cheap, but no reason to run it on every poll cycle
+    // (which can be sub-second when the queue is busy). Refreshed every Nth cycle instead,
+    // reusing whichever scope/repository that cycle already created for ClaimBatchAsync.
+    private const int BacklogRefreshEveryNCycles = 5;
+    private int _cyclesSinceBacklogRefresh;
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly InFlightLimiter _limiter;
     private readonly PollerOptions _pollerOptions;
@@ -95,6 +104,12 @@ public sealed class TaskPoller : BackgroundService
                         TimeSpan.FromSeconds(_pollerOptions.LeaseDurationSeconds),
                         _clock.GetUtcNow().UtcDateTime,
                         stoppingToken);
+
+                    if (++_cyclesSinceBacklogRefresh >= BacklogRefreshEveryNCycles)
+                    {
+                        _cyclesSinceBacklogRefresh = 0;
+                        PendingTasks.Set(await repository.CountPendingAsync(stoppingToken));
+                    }
                 }
 
                 if (claimed.Count == 0)

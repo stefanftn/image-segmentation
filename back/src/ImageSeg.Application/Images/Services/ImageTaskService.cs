@@ -6,6 +6,7 @@ using ImageSeg.Domain.Images.Interfaces;
 using ImageSeg.Domain.Shared.Interfaces;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Prometheus;
 
 namespace ImageSeg.Application.Images.Services;
 
@@ -20,6 +21,22 @@ namespace ImageSeg.Application.Images.Services;
 public sealed class ImageTaskService : IImageTaskService
 {
     private static readonly HashSet<string> ValidModes = new(StringComparer.OrdinalIgnoreCase) { "interior", "exterior" };
+
+    // Labeled by operation ("Segment"/"Regions") and outcome ("completed"/"failed") - the one
+    // pair of numbers that answers "is the pipeline actually working" without reading logs.
+    private static readonly Counter TasksTotal = Metrics.CreateCounter(
+        "imageseg_tasks_total", "Tasks that reached a terminal state.", "operation", "outcome");
+
+    // End-to-end: CreatedAtUtc (submission) to UpdatedAtUtc at the terminal write - queue wait +
+    // preprocessing + AI inference + result upload, all of it. Exponential buckets from 1s to
+    // ~17min cover both a healthy fast path and a queue-backlog-induced slow one.
+    private static readonly Histogram TaskDurationSeconds = Metrics.CreateHistogram(
+        "imageseg_task_duration_seconds", "End-to-end duration from task creation to a terminal (Completed/Failed) state.",
+        new HistogramConfiguration
+        {
+            LabelNames = new[] { "operation" },
+            Buckets = Histogram.ExponentialBuckets(1, 2, 11)
+        });
 
     private readonly IImageTaskRepository _repository;
     private readonly IStorageService _storage;
@@ -201,7 +218,7 @@ public sealed class ImageTaskService : IImageTaskService
             return false;
         }
 
-        await BroadcastAsync(id, ct);
+        RecordTerminal(await BroadcastAsync(id, ct));
         return true;
     }
 
@@ -215,7 +232,7 @@ public sealed class ImageTaskService : IImageTaskService
             return false;
         }
 
-        await BroadcastAsync(id, ct);
+        RecordTerminal(await BroadcastAsync(id, ct));
         return true;
     }
 
@@ -226,17 +243,33 @@ public sealed class ImageTaskService : IImageTaskService
 
         var affected = await _repository.SweepStaleAsync(cutoff, batchSize, "Timeout: exceeded max processing duration", now, ct);
         foreach (var id in affected)
-            await BroadcastAsync(id, ct);
+            RecordTerminal(await BroadcastAsync(id, ct));
 
         return affected.Count;
     }
 
-    private async Task BroadcastAsync(Guid id, CancellationToken ct)
+    private async Task<ImageTask?> BroadcastAsync(Guid id, CancellationToken ct)
     {
         var task = await _repository.GetByIdAsync(id, ct);
-        if (task is null) return; // deleted between the write and this read - nothing to tell anyone
+        if (task is null) return null; // deleted between the write and this read - nothing to tell anyone
 
         await _notifier.NotifyStatusChangedAsync(TaskStatusSnapshot.From(task), ct);
+        return task;
+    }
+
+    /// <summary>Feeds TasksTotal/TaskDurationSeconds from whatever BroadcastAsync just re-read -
+    /// called from every path that can move a task into Completed/Failed (CompleteAsync,
+    /// FailAsync, SweepStaleAsync), never from AdvanceStateAsync's intermediate transitions.</summary>
+    private static void RecordTerminal(ImageTask? task)
+    {
+        if (task is null) return;
+        if (task.State != ImageTaskState.Completed && task.State != ImageTaskState.Failed) return;
+
+        var outcome = task.State == ImageTaskState.Completed ? "completed" : "failed";
+        var operation = task.Operation.ToString();
+
+        TasksTotal.WithLabels(operation, outcome).Inc();
+        TaskDurationSeconds.WithLabels(operation).Observe((task.UpdatedAtUtc - task.CreatedAtUtc).TotalSeconds);
     }
 
     private async Task CompensateAsync(string storageKey, CancellationToken ct)

@@ -53,6 +53,14 @@ public interface IImageTaskRepository
     Task<IReadOnlyList<Guid>> SweepStaleAsync(DateTime cutoffUtc, int batchSize, string errorMessage, DateTime utcNow, CancellationToken ct);
 
     /// <summary>
+    /// Count of <c>Pending</c> tasks right now - the actual queue backlog, as opposed to
+    /// <see cref="ClaimBatchAsync"/>'s per-cycle batch size. Used only for the
+    /// <c>imageseg_pending_tasks</c> gauge (see <c>TaskPoller</c>) - not on any hot path, so a
+    /// plain COUNT is fine rather than something set-based.
+    /// </summary>
+    Task<int> CountPendingAsync(CancellationToken ct);
+
+    /// <summary>
     /// Deletes the task row and every <see cref="MaskGroups.Entities.MaskGroup"/> referencing
     /// it, scoped to <paramref name="ownerId"/> (spec §8, DELETE /api/images/{id}). Returns the
     /// deleted task (so the caller can remove its storage objects) or null if no such task

@@ -1,0 +1,155 @@
+{
+  "title": "ImageSeg Overview",
+  "uid": "imageseg-overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "timezone": "browser",
+  "time": { "from": "now-6h", "to": "now" },
+  "refresh": "30s",
+  "tags": ["imageseg"],
+  "panels": [
+    { "type": "row", "title": "HTTP (web)", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "id": 100, "collapsed": false, "panels": [] },
+
+    {
+      "id": 1, "type": "timeseries", "title": "Request rate by status code",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "imageseg-prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "drawStyle": "line", "fillOpacity": 15, "stacking": { "mode": "normal" } } }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(http_requests_received_total[5m])) by (code)", "legendFormat": "{{code}}" }
+      ]
+    },
+    {
+      "id": 2, "type": "timeseries", "title": "Latency (p50 / p95 / p99)",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "imageseg-prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 5 } }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p50" },
+        { "refId": "B", "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p95" },
+        { "refId": "C", "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p99" }
+      ]
+    },
+    {
+      "id": 3, "type": "timeseries", "title": "4xx/5xx rate + rate-limit rejections",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "imageseg-prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(http_requests_received_total{code=~\"4..|5..\"}[5m])) by (code)", "legendFormat": "http {{code}}" },
+        { "refId": "B", "expr": "sum(rate(imageseg_rate_limit_rejections_total[5m])) by (policy)", "legendFormat": "429 ({{policy}})" }
+      ]
+    },
+
+    { "type": "row", "title": "Pipeline (TaskPoller / queue)", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 }, "id": 101, "collapsed": false, "panels": [] },
+
+    {
+      "id": 10, "type": "stat", "title": "Pending backlog",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 10 },
+      "datasource": { "type": "prometheus", "uid": "imageseg-prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [
+        { "color": "green", "value": null }, { "color": "orange", "value": 20 }, { "color": "red", "value": 100 }
+      ] } }, "overrides": [] },
+      "targets": [ { "refId": "A", "expr": "sum(imageseg_pending_tasks)" } ]
+    },
+    {
+      "id": 11, "type": "stat", "title": "In-flight sidecar calls",
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 10 },
+      "datasource": { "type": "prometheus", "uid": "imageseg-prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [ { "refId": "A", "expr": "sum(imageseg_inflight_tasks)" } ]
+    },
+    {
+      "id": 12, "type": "stat", "title": "Sweeper force-fails (1h)",
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 10 },
+      "datasource": { "type": "prometheus", "uid": "imageseg-prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [
+        { "color": "green", "value": null }, { "color": "red", "value": 1 }
+      ] } }, "overrides": [] },
+      "targets": [ { "refId": "A", "expr": "sum(increase(imageseg_sweeper_force_failed_total[1h]))" } ]
+    },
+    {
+      "id": 13, "type": "timeseries", "title": "Claim rate vs. claim-cycle errors",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 10 },
+      "datasource": { "type": "prometheus", "uid": "imageseg-prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(imageseg_taskpoller_claimed_total[5m]))", "legendFormat": "claimed/s" },
+        { "refId": "B", "expr": "sum(rate(imageseg_taskpoller_claim_cycle_errors_total[5m]))", "legendFormat": "claim errors/s" }
+      ]
+    },
+    {
+      "id": 14, "type": "timeseries", "title": "Task outcomes by operation",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "imageseg-prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops", "custom": { "drawStyle": "bars", "fillOpacity": 40, "stacking": { "mode": "normal" } } }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(imageseg_tasks_total[5m])) by (operation, outcome)", "legendFormat": "{{operation}} - {{outcome}}" }
+      ]
+    },
+    {
+      "id": 15, "type": "timeseries", "title": "End-to-end task duration (p50 / p95)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 18 },
+      "datasource": { "type": "prometheus", "uid": "imageseg-prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 5 } }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.50, sum(rate(imageseg_task_duration_seconds_bucket[5m])) by (le, operation))", "legendFormat": "p50 {{operation}}" },
+        { "refId": "B", "expr": "histogram_quantile(0.95, sum(rate(imageseg_task_duration_seconds_bucket[5m])) by (le, operation))", "legendFormat": "p95 {{operation}}" }
+      ]
+    },
+
+    { "type": "row", "title": "AI Sidecar", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 26 }, "id": 102, "collapsed": false, "panels": [] },
+
+    {
+      "id": 20, "type": "timeseries", "title": "Segment/regions request rate by outcome",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 27 },
+      "datasource": { "type": "prometheus", "uid": "imageseg-prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(sidecar_segment_requests_total[5m])) by (mode, outcome)", "legendFormat": "segment {{mode}}/{{outcome}}" },
+        { "refId": "B", "expr": "sum(rate(sidecar_regions_requests_total[5m])) by (outcome)", "legendFormat": "regions/{{outcome}}" }
+      ]
+    },
+    {
+      "id": 21, "type": "timeseries", "title": "Segment latency p95 by mode",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 27 },
+      "datasource": { "type": "prometheus", "uid": "imageseg-prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 5 } }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.95, sum(rate(sidecar_segment_latency_seconds_bucket[5m])) by (le, mode))", "legendFormat": "{{mode}}" },
+        { "refId": "B", "expr": "histogram_quantile(0.95, sum(rate(sidecar_regions_latency_seconds_bucket[5m])) by (le))", "legendFormat": "regions" }
+      ]
+    },
+    {
+      "id": 22, "type": "stat", "title": "Model readiness",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 27 },
+      "datasource": { "type": "prometheus", "uid": "imageseg-prometheus" },
+      "fieldConfig": { "defaults": { "mappings": [
+        { "type": "value", "options": { "0": { "text": "loading", "color": "orange" }, "1": { "text": "ready", "color": "green" } } }
+      ] }, "overrides": [] },
+      "targets": [ { "refId": "A", "expr": "sidecar_model_ready", "legendFormat": "{{model}}" } ]
+    },
+
+    { "type": "row", "title": ".NET runtime (web)", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 35 }, "id": 103, "collapsed": false, "panels": [] },
+
+    {
+      "id": 30, "type": "timeseries", "title": "GC collections/s by generation",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 36 },
+      "datasource": { "type": "prometheus", "uid": "imageseg-prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops", "custom": { "drawStyle": "line", "fillOpacity": 5 } }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(dotnet_collection_count_total[5m])) by (generation)", "legendFormat": "gen {{generation}}" }
+      ]
+    },
+    {
+      "id": 31, "type": "timeseries", "title": "Process working set",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 36 },
+      "datasource": { "type": "prometheus", "uid": "imageseg-prometheus" },
+      "fieldConfig": { "defaults": { "unit": "bytes", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "process_working_set_bytes", "legendFormat": "web" }
+      ]
+    }
+  ]
+}

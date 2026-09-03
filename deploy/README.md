@@ -133,17 +133,25 @@ since that file is shared by every service — for that one case, run
 and run the two `docker compose` commands from the workflow yourself.
 
 - **Prometheus** scrapes `web:8080/metrics` (prometheus-net.AspNetCore — HTTP request metrics
-  plus `imageseg_taskpoller_claimed_total`, `imageseg_inflight_tasks`,
-  `imageseg_sweeper_force_failed_total`) and `ai-sidecar:8000/metrics` (already instrumented —
-  `sidecar_segment_latency_seconds`, `sidecar_model_ready{model}`, etc.). It is **not** published
-  on any host port — only Grafana talks to it, over the internal `imageseg` Docker network.
+  plus `imageseg_taskpoller_claimed_total`, `imageseg_taskpoller_claim_cycle_errors_total`,
+  `imageseg_inflight_tasks`, `imageseg_pending_tasks` (real Postgres backlog, refreshed every 5th
+  poll cycle), `imageseg_tasks_total{operation,outcome}`,
+  `imageseg_task_duration_seconds{operation}` (end-to-end, submission to terminal state),
+  `imageseg_sweeper_force_failed_total`, `imageseg_rate_limit_rejections_total{policy}`) and
+  `ai-sidecar:8000/metrics` (already instrumented — `sidecar_segment_latency_seconds`,
+  `sidecar_model_ready{model}`, etc.). It is **not** published on any host port — only Grafana
+  talks to it, over the internal `imageseg` Docker network.
 - **Grafana** is reachable at `https://moleraj.stefanpopovic.site/monitoring/` once step 4's
   nginx block is applied. First login is `GRAFANA_ADMIN_USER`/`GRAFANA_ADMIN_PASSWORD` from
   `~/imageseg-secrets/.env` — the latter has no built-in default in
   `deploy/docker-compose.prod.yml`, so it must actually be set there before the first `up`.
-  Prometheus is pre-wired as its datasource (`deploy/monitoring/grafana-provisioning/`); drop a
-  dashboard JSON into `deploy/monitoring/grafana-provisioning/dashboards/` (see that folder's
-  README for two ready-made community dashboards) and Grafana picks it up within 30s, no restart.
+  Prometheus is pre-wired as its datasource with a fixed `uid` (`imageseg-prometheus` —
+  `deploy/monitoring/grafana-provisioning/datasources/`), and a starter dashboard
+  ("ImageSeg Overview") is provisioned automatically from
+  `deploy/monitoring/grafana-provisioning/dashboards/imageseg-overview.json` — HTTP, pipeline,
+  AI sidecar, and .NET runtime rows, all wired to the metrics above. Drop more dashboard JSON in
+  that same folder (see its own README for two ready-made community dashboards) and Grafana
+  picks it up within 30s, no restart.
 
 ## Why frontend and backend share an origin, and MinIO doesn't
 
