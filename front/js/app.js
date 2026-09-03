@@ -32,10 +32,11 @@ import { createMachine, STATE } from "./state.js";
 import { Compositor, loadImageFromBlob, createLabelMap, isUnedited } from "./compositor.js";
 import { createRegionPicker } from "./regions.js";
 import { createControls } from "./controls.js";
-import { createBrushTool } from "./brush.js";
-import { createWarpTool } from "./warp.js";
-import { collapseSheet } from "./edittabs.js";
+import { createBrushTool } from "./tools/brush.js";
+import { createWarpTool } from "./tools/warp.js";
+import { collapseSheet } from "./ui/edittabs.js";
 import { saveLayers, loadLayer, clearLayer } from "./editcache.js";
+import { confirmDialog } from "./ui/confirm.js";
 
 /**
  * Fails loudly, in one place, rather than as a cryptic "Cannot read
@@ -163,8 +164,10 @@ const warp = createWarpTool({
   getActiveLayerId: () => controls.activeId,
   displayCanvas: $("display"),
   overlaySvg: $("warpOverlay"),
-  quadPolygon: $("warpQuad"),
+  meshGroup: $("warpMesh"),
   handlesContainer: $("warpHandles"),
+  rowsReadout: $("warpRowsReadout"),
+  colsReadout: $("warpColsReadout"),
   onPointsCommitted: () => {
     controls.commitHistoryCheckpoint();
     updateReadout();
@@ -644,6 +647,7 @@ function adoptSegmentMask(maskImage) {
     maskImage,
   });
   restoreFromEditCache(layer.id);
+  rememberCurrentTask();
 
   if (layer.coverage < 0.0005) {
     // The job succeeded and found essentially nothing. With no prompt to
@@ -703,6 +707,7 @@ async function adoptLabelMap(labelImage, { restoreGroups }) {
   session.reusingImage = true;
   setHasImage(true);
   machine.to(STATE.READY, { requestId: session.requestId });
+  rememberCurrentTask();
 
   picker.mount(session.originalImage, map);
   // Materializes every saved group as a layer (syncGroupLayers, inside
@@ -1004,7 +1009,12 @@ async function saveGroup() {
 }
 
 async function removeGroup(group, button) {
-  if (!window.confirm(`Delete “${group.name}”?`)) return;
+  const ok = await confirmDialog({
+    title: t("select.deleteGroupTitle"),
+    message: t("select.deleteGroupMessage", { name: group.name }),
+    confirmLabel: t("common.delete"),
+  });
+  if (!ok) return;
   const done = await withGroupWrite(button, async () => {
     await deleteMaskGroup(session.requestId, group.id);
     return true;
@@ -1119,7 +1129,12 @@ function renderTaskList() {
  * tries to act on a task the server no longer has.
  */
 async function deleteTask(task, button) {
-  if (!window.confirm(`Delete this ${describeJob(task.operation, task.mode)} job? This cannot be undone.`)) {
+  const ok = await confirmDialog({
+    title: t("jobForm.deleteJobTitle"),
+    message: t("jobForm.deleteJobMessage", { job: describeJob(task.operation, task.mode) }),
+    confirmLabel: t("common.delete"),
+  });
+  if (!ok) {
     return;
   }
   button.disabled = true;
@@ -1142,6 +1157,7 @@ async function deleteTask(task, button) {
   if (session.requestId === task.requestId) {
     session.requestId = null;
     session.lastOpenAttempt = null;
+    forgetCurrentTask();
   }
   renderTaskList();
   toast(t("select.jobDeleted"));
@@ -1245,6 +1261,7 @@ async function openTask(task) {
   // showing a photo across states that normally wouldn't (error, tracking);
   // see body.has-image in styles.css.
   setHasImage(true);
+  rememberCurrentTask();
   setReadyFace("edit");
   compositor.render();
 
@@ -1763,6 +1780,7 @@ function resetAll() {
   controls.resetPanel();
   picker.dispose();
   if (session.fileUrl) URL.revokeObjectURL(session.fileUrl);
+  forgetCurrentTask();
 
   Object.assign(session, {
     file: null, fileUrl: null, originalImage: null,
@@ -1925,6 +1943,49 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") flushEditCacheSave();
 });
 window.addEventListener("pagehide", flushEditCacheSave);
+
+/** Remembers which task is open — not the edits (editcache.js already
+ *  covers those), just "which task, so a refresh can get back to it" at
+ *  all instead of landing on the empty upload screen regardless of what's
+ *  cached. localStorage rather than IndexedDB on purpose: this is one small
+ *  JSON object, not an image, and it should survive a closed tab the same
+ *  way "was I signed in" already does — sessionStorage would lose exactly
+ *  the case (closed the tab by accident, or on purpose, meant to come back)
+ *  this exists for. */
+const CURRENT_TASK_KEY = "mw-current-task";
+
+function rememberCurrentTask() {
+  if (!session.requestId) return;
+  try {
+    localStorage.setItem(CURRENT_TASK_KEY, JSON.stringify({
+      requestId: session.requestId,
+      operation: session.taskOperation,
+      mode: session.taskMode,
+    }));
+  } catch (err) {
+    // Best-effort — a failed write here just means a refresh won't recover
+    // this session, not that editing itself is broken.
+  }
+}
+
+function forgetCurrentTask() {
+  try {
+    localStorage.removeItem(CURRENT_TASK_KEY);
+  } catch (err) {
+    // ignore
+  }
+}
+
+function recallCurrentTask() {
+  try {
+    const raw = localStorage.getItem(CURRENT_TASK_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && parsed.requestId ? parsed : null;
+  } catch (err) {
+    return null;
+  }
+}
 
 /** If this layer id has a cached mask/edits from an earlier session (see
  *  js/editcache.js), applies them in place. Fire-and-forget by design — the
@@ -2119,7 +2180,7 @@ function wireBrush() {
   // the active tab (see body[data-edittab] in styles.css) — this keeps the
   // brush tool's own on/off flag (cursor ring, magnifier) in step with that,
   // without brush.js needing to know anything about tabs at all.
-  // The bottom sheet auto-expands when a tab is picked (see js/edittabs.js),
+  // The bottom sheet auto-expands when a tab is picked (see js/ui/edittabs.js),
   // which is right for Colour/Adjust but wrong for Mask: the whole point is
   // to then touch the photo, and an expanded sheet can cover it entirely on
   // a phone. Collapse it the instant a stroke starts. No-op on desktop.
@@ -2145,6 +2206,10 @@ function syncWarpVisibility() {
 
 function wireWarp() {
   $("resetWarp").addEventListener("click", () => warp.reset());
+  $("warpAddRow").addEventListener("click", () => warp.addRow());
+  $("warpRemoveRow").addEventListener("click", () => warp.removeRow());
+  $("warpAddCol").addEventListener("click", () => warp.addColumn());
+  $("warpRemoveCol").addEventListener("click", () => warp.removeColumn());
 
   syncWarpVisibility();
   new MutationObserver(syncWarpVisibility).observe(document.body, { attributes: true, attributeFilter: ["data-edittab"] });
@@ -2420,6 +2485,8 @@ function bootAuth() {
 
   if (isAuthed()) {
     toggleAuthed(true);
+    const remembered = recallCurrentTask();
+    if (remembered) openTask(remembered);
   } else {
     showAuth("login");
   }

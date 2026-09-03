@@ -139,7 +139,7 @@
        of .masthead while body isn't .authed (see styles.css), which is why
        #authScreen has its own copy (#settingsToggleAuth) for the signed-out
        screens, and the mobile sidebar has a third (#settingsToggleSidebar).
-       All three open the same #settingsDialog — see js/settings.js.
+       All three open the same #settingsDialog — see js/ui/settings.js.
        Positioned last/rightmost among the masthead buttons on purpose — see
        the compound-selector note on .btn.masthead__reset in styles.css for
        why only the *first* such button needs margin-left:auto. -->
@@ -164,8 +164,8 @@
        #appSidebar — a shell for whatever gets added there next; today it
        just re-exposes New photo/theme/Sign out in one place instead of
        three separate crowded masthead buttons on a phone-width screen.
-       js/sidebar.js owns the open/close state (a plain --open flag on the
-       drawer), same standalone pattern as theme.js/edittabs.js: it doesn't
+       js/ui/sidebar.js owns the open/close state (a plain --open flag on the
+       drawer), same standalone pattern as theme.js/ui/edittabs.js: it doesn't
        read or write body[data-state]/[data-ready]. -->
   <button type="button" class="iconbtn masthead__hamburger" id="sidebarToggle"
           aria-haspopup="true" aria-controls="appSidebar" aria-expanded="false"
@@ -205,7 +205,7 @@
 </aside>
 
 <!-- Settings: one dialog, three doors in (masthead gear, auth-screen gear,
-     the hamburger sidebar's Settings row) — see js/settings.js. Reachable
+     the hamburger sidebar's Settings row) — see js/ui/settings.js. Reachable
      whether signed in or not, since theme/language are client-side
      preferences with nothing to do with an account. -->
 <div class="settingsbackdrop" id="settingsBackdrop" hidden></div>
@@ -241,6 +241,20 @@
     <select class="select" id="settingsLanguage">
       <option value="en">English</option>
     </select>
+  </div>
+</div>
+
+<!-- Confirm: a themed stand-in for window.confirm(), used only for
+     destructive actions (deleting a saved selection, deleting a job) — see
+     js/ui/confirm.js. confirmDialog() fills in the title/message/button label
+     per call rather than this being one fixed piece of copy. -->
+<div class="settingsbackdrop" id="confirmBackdrop" hidden></div>
+<div class="settingsdialog confirmdialog" id="confirmDialog" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmMessage" hidden>
+  <h2 id="confirmTitle">Delete this?</h2>
+  <p id="confirmMessage" class="confirmdialog__message"></p>
+  <div class="confirmdialog__actions">
+    <button type="button" class="btn btn--quiet" id="confirmCancel" data-i18n="common.cancel">Cancel</button>
+    <button type="button" class="btn confirmdialog__danger" id="confirmOk" data-i18n="common.delete">Delete</button>
   </div>
 </div>
 
@@ -283,28 +297,25 @@
 
           <!-- Brush & Eraser: draws live strokes here at preview scale for
                instant feedback; committed to the active layer's actual mask
-               (full resolution) on pointerup — see js/brush.js. Only accepts
+               (full resolution) on pointerup — see js/tools/brush.js. Only accepts
                pointer events while the Mask tab is the active one, everywhere
                else it's transparent to clicks (zoom, before/after, etc. keep
                working normally on the other tabs). -->
           <canvas id="maskDrawSurface" width="1" height="1" class="maskdraw"></canvas>
 
-          <!-- Perspective Warp: 4 draggable corners fitting a texture to the
-               wall's actual angle in the photo — see js/warp.js. Visible only
-               on the Adjust tab, and only once a texture is picked (nothing
-               to warp otherwise). The quad outline is SVG (tolerates the
+          <!-- Perspective Warp: a draggable control-point grid (2×2 by
+               default, either dimension can grow) fitting a texture to the
+               wall's actual angle — see js/tools/warp.js. Visible only on the
+               Adjust tab, and only once a texture is picked (nothing to
+               warp otherwise). The mesh lines are SVG (tolerates the
                non-uniform scaling a photo's own aspect ratio needs); the
-               handles are plain buttons so they stay perfectly round
-               regardless of that same scaling. -->
+               handles are plain buttons, created/positioned by JS rather
+               than declared here since the grid size isn't fixed, so they
+               stay perfectly round regardless of that same scaling. -->
           <svg class="warpoverlay" id="warpOverlay" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true" hidden>
-            <polygon id="warpQuad" class="warpoverlay__quad" points="0,0 1,0 1,1 0,1"></polygon>
+            <g id="warpMesh"></g>
           </svg>
-          <div class="warphandles" id="warpHandles" aria-hidden="true" hidden>
-            <button type="button" class="warphandle" data-warp-index="0" style="left:0%;top:0%"></button>
-            <button type="button" class="warphandle" data-warp-index="1" style="left:100%;top:0%"></button>
-            <button type="button" class="warphandle" data-warp-index="2" style="left:100%;top:100%"></button>
-            <button type="button" class="warphandle" data-warp-index="3" style="left:0%;top:100%"></button>
-          </div>
+          <div class="warphandles" id="warpHandles" aria-hidden="true" hidden></div>
 
           <div class="comparebox" id="comparebox" hidden>
             <canvas id="beforeCanvas" width="1" height="1"></canvas>
@@ -584,9 +595,9 @@
          see .edittabbar / [data-edittab-panel] in styles.css:
            - desktop: a horizontal tab row inside the card
            - narrow screens: the card becomes a bottom sheet; data-sheetopen
-             (toggled by js/edittabs.js) controls whether it's collapsed to a
+             (toggled by js/ui/edittabs.js) controls whether it's collapsed to a
              handle or expanded over the stage.
-         js/edittabs.js only ever sets these two attributes — it doesn't read
+         js/ui/edittabs.js only ever sets these two attributes — it doesn't read
          or write body[data-state]/[data-ready], so this is independent of the
          task-flow state machine. -->
     <section class="card editcard" data-when="ready" data-when-ready="edit" data-edittab="surfaces" style="--d:block"
@@ -720,6 +731,17 @@
             <input type="range" id="texStrength" min="0" max="100" step="1" value="70" />
             <div class="control__head control__head--sub">
               <span class="control__label">
+                <label for="texScale" data-i18n="edit.texScaleLabel">Texture size</label>
+                <span class="infotip">
+                  <button type="button" class="infotip__icon" data-i18n-attr="aria-label:common.moreInfo" aria-label="More info"></button>
+                  <span class="infotip__bubble" role="tooltip" data-i18n="edit.texScaleHint">How large the tile pattern reads on the wall — smaller for a finer, more detailed repeat, larger for bigger bricks or planks.</span>
+                </span>
+              </span>
+              <span class="numfield"><input type="number" id="texScaleReadout" class="numinput" min="25" max="300" step="1" value="100" aria-label="Texture size" /><span class="numunit">%</span></span>
+            </div>
+            <input type="range" id="texScale" min="25" max="300" step="1" value="100" />
+            <div class="control__head control__head--sub">
+              <span class="control__label">
                 <label for="texRotation" data-i18n="edit.texRotationLabel">Texture rotation</label>
                 <span class="infotip">
                   <button type="button" class="infotip__icon" data-i18n-attr="aria-label:common.moreInfo" aria-label="More info"></button>
@@ -747,10 +769,24 @@
               <label data-i18n="edit.warpLabel">Perspective warp</label>
               <span class="infotip">
                 <button type="button" class="infotip__icon" data-i18n-attr="aria-label:common.moreInfo" aria-label="More info"></button>
-                <span class="infotip__bubble" role="tooltip" data-i18n="edit.warpHint">Drag the four corner handles on the photo to fit the texture to the wall's actual angle — a real perspective fit, not just a slider.</span>
+                <span class="infotip__bubble" role="tooltip" data-i18n="edit.warpHint">Drag the handles on the photo to fit the texture to the wall's actual angle — a real perspective fit, not just a slider. Add rows or columns for a wall that isn't one flat plane.</span>
               </span>
             </span>
             <button type="button" class="linkbtn" id="resetWarp" data-i18n="edit.warpReset">Reset warp</button>
+          </div>
+          <div class="warpgrid">
+            <div class="warpgrid__group">
+              <span class="warpgrid__label" data-i18n="edit.warpRowsLabel">Rows</span>
+              <button type="button" class="iconbtn" id="warpRemoveRow" data-i18n-attr="aria-label:edit.warpRemoveRow" aria-label="Remove row">−</button>
+              <output id="warpRowsReadout">2</output>
+              <button type="button" class="iconbtn" id="warpAddRow" data-i18n-attr="aria-label:edit.warpAddRow" aria-label="Add row">+</button>
+            </div>
+            <div class="warpgrid__group">
+              <span class="warpgrid__label" data-i18n="edit.warpColsLabel">Columns</span>
+              <button type="button" class="iconbtn" id="warpRemoveCol" data-i18n-attr="aria-label:edit.warpRemoveCol" aria-label="Remove column">−</button>
+              <output id="warpColsReadout">2</output>
+              <button type="button" class="iconbtn" id="warpAddCol" data-i18n-attr="aria-label:edit.warpAddCol" aria-label="Add column">+</button>
+            </div>
           </div>
 
           <div class="control control__toggles">
@@ -896,11 +932,12 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script type="module" src="js/i18n.js"></script>
-<script type="module" src="js/theme.js"></script>
-<script type="module" src="js/edittabs.js"></script>
-<script type="module" src="js/sidebar.js"></script>
-<script type="module" src="js/infotip.js"></script>
-<script type="module" src="js/settings.js"></script>
+<script type="module" src="js/ui/theme.js"></script>
+<script type="module" src="js/ui/edittabs.js"></script>
+<script type="module" src="js/ui/sidebar.js"></script>
+<script type="module" src="js/ui/infotip.js"></script>
+<script type="module" src="js/ui/settings.js"></script>
+<script type="module" src="js/ui/confirm.js"></script>
 <script type="module" src="js/app.js"></script>
 </body>
 </html>

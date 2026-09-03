@@ -11,7 +11,7 @@
 //     t("some.key", { vars }) directly from app.js / controls.js / regions.js
 //     instead of writing English literals inline.
 //
-// This file is standalone like theme.js/edittabs.js — it doesn't read or
+// This file is standalone like theme.js/ui/edittabs.js — it doesn't read or
 // write body[data-state]/[data-ready], it only reads STRINGS and touches
 // [data-i18n]/[data-i18n-attr] elements and whatever calls t() later.
 

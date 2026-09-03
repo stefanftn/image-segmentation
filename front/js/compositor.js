@@ -470,13 +470,17 @@ export function defaultEdits() {
     texture: "none",
     textureStrength: 0.7,
     textureRotation: 0,   // degrees, -180…180 — matches the tile to a wall's angle
+    textureScale: 1,       // 0.25…4 — how large the tile pattern reads (below 1
+                            // = finer/more repeats, above 1 = coarser/fewer)
     textureDepth: 0,       // -100…100 — one side of the tile compressed toward
                             // the other, approximating a wall receding at an angle
     feather: 0,            // 0…100 — soft-edge blur on the mask itself, see
                             // _buildStage(); 0 is the original hard cut
     growShrink: 0,          // pixels at full resolution, +grow/-shrink — see
                             // _growShrink(); 0 is the mask exactly as given
-    warpPoints: IDENTITY_WARP_POINTS.map((p) => [...p]), // own copy per layer —
+    warpRows: 2,             // grid size for Perspective Warp — 2×2 is the
+    warpCols: 2,             // plain 4-corner case; either can grow independently
+    warpPoints: identityWarpGrid(2, 2), // row-major, length === warpRows*warpCols;
                             // never mutated in place, only ever replaced
                             // wholesale, same as every other edit here
     blendMode: "normal",   // "normal" | "multiply" | "soft-light" | "overlay"
@@ -495,12 +499,13 @@ export function isUnedited(edits) {
     && edits.texture === d.texture
     && edits.textureStrength === d.textureStrength
     && edits.textureRotation === d.textureRotation
+    && edits.textureScale === d.textureScale
     && edits.textureDepth === d.textureDepth
     && edits.feather === d.feather
     && edits.growShrink === d.growShrink
     && edits.blendMode === d.blendMode
     && edits.specular === d.specular
-    && isWarpIdentity(edits.warpPoints);
+    && isWarpIdentity(edits.warpPoints, edits.warpRows, edits.warpCols);
 }
 
 /**
@@ -546,15 +551,30 @@ export function depthStripBoundaries(totalWidth, strips, depth) {
  * four here means "no perspective distortion", the same role 0 plays for
  * feather or growShrink.
  */
-export const IDENTITY_WARP_POINTS = [[0, 0], [1, 0], [1, 1], [0, 1]];
 
-/** True if `points` is close enough to IDENTITY_WARP_POINTS to skip the
- *  warp entirely — avoids the grid-triangle pass's cost when nobody has
- *  touched a handle. */
-export function isWarpIdentity(points) {
-  if (!points) return true;
+/** An evenly-spaced `rows` × `cols` grid of [x,y] points in 0…1 fractions,
+ *  row-major (index = row*cols + col) — "no warp" for any grid size, the
+ *  same role the old fixed 4-corner IDENTITY_WARP_POINTS played for the
+ *  2×2-only case. 2×2 reproduces those exact 4 corners. */
+export function identityWarpGrid(rows, cols) {
+  const points = [];
+  for (let r = 0; r < rows; r += 1) {
+    for (let c = 0; c < cols; c += 1) {
+      points.push([cols === 1 ? 0 : c / (cols - 1), rows === 1 ? 0 : r / (rows - 1)]);
+    }
+  }
+  return points;
+}
+
+/** True if `points` (a `rows`×`cols` grid) is close enough to its own
+ *  identity grid to skip the warp entirely — avoids the mesh pass's cost
+ *  when nobody has touched a handle. */
+export function isWarpIdentity(points, rows, cols) {
+  if (!points || !points.length) return true;
+  const identity = identityWarpGrid(rows, cols);
+  if (points.length !== identity.length) return false;
   return points.every(([x, y], i) => {
-    const [ix, iy] = IDENTITY_WARP_POINTS[i];
+    const [ix, iy] = identity[i];
     return Math.abs(x - ix) < 1e-4 && Math.abs(y - iy) < 1e-4;
   });
 }
@@ -954,7 +974,17 @@ export class Compositor {
     for (const layer of this.layers) {
       const clipped = stage.layers.get(layer.id);
       if (!clipped) continue;
-      const { tint, tintStrength, hue, saturation, texture, textureStrength, textureRotation, textureDepth, warpPoints, blendMode, specular } = layer.edits;
+      const { tint, tintStrength, hue, saturation, texture, textureStrength, textureRotation, textureScale, textureDepth, warpPoints, warpRows, warpCols, blendMode, specular } = layer.edits;
+      // warpRows/warpCols are new fields — edits cached before they existed
+      // (see js/editcache.js) won't have them. Falling back to 2×2 only
+      // makes sense if the point count actually matches that; otherwise
+      // this is unreadable old data, and identity (no warp) is the only
+      // safe interpretation rather than guessing at a grid layout.
+      const safeWarpRows = warpRows || 2;
+      const safeWarpCols = warpCols || 2;
+      const safeWarpPoints = Array.isArray(warpPoints) && warpPoints.length === safeWarpRows * safeWarpCols
+        ? warpPoints
+        : identityWarpGrid(safeWarpRows, safeWarpCols);
 
       /* --- colour + saturation, inside the mask only --- */
       const { canvas: adjusted, ctx: actx } = this._scratchFor(1, w, h);
@@ -998,14 +1028,16 @@ export class Compositor {
         const { canvas: raw, ctx: rctx } = this._scratchFor(3, w, h);
         const pattern = rctx.createPattern(tileCanvas, "repeat");
         // Scale the tile with the working resolution so the preview and the
-        // full-res export show the same texture, not the same pixel count.
-        // Rotation rides the same matrix so a tile can be turned to match a
-        // wall's angle without a second transform pass.
+        // full-res export show the same texture, not the same pixel count —
+        // textureScale (the user's own "how big does the tile read" control)
+        // rides the same matrix on top of that, so 100% always means "the
+        // tile's natural size", regardless of preview vs. full export.
         if (pattern.setTransform) {
           try {
             const m = new DOMMatrix();
             m.rotateSelf(textureRotation || 0);
-            m.scaleSelf(stage.scale, stage.scale);
+            const s = stage.scale * (textureScale || 1);
+            m.scaleSelf(s, s);
             pattern.setTransform(m);
           } catch { /* older engines: tile stays at 1:1, unrotated, still usable */ }
         }
@@ -1015,12 +1047,12 @@ export class Compositor {
         // Depth warps the tile fill itself, full-frame and unclipped — the
         // mask boundary is never part of this canvas, so it can't be
         // distorted by it. Clipping to the mask always happens after.
-        // Perspective Warp (4 draggable corners) runs on top of that, same
-        // reasoning — full-frame, unclipped, mask applied afterwards.
+        // Perspective Warp (a draggable control-point grid) runs on top of
+        // that, same reasoning — full-frame, unclipped, mask applied after.
         const depthWarped = textureDepth ? this._warpDepth(raw, w, h, textureDepth / 100) : raw;
-        const warped = isWarpIdentity(warpPoints)
+        const warped = isWarpIdentity(safeWarpPoints, safeWarpRows, safeWarpCols)
           ? depthWarped
-          : this._warpPerspective(depthWarped, w, h, warpPoints);
+          : this._warpPerspective(depthWarped, w, h, safeWarpPoints, safeWarpRows, safeWarpCols);
 
         const { canvas: tex, ctx: tctx } = this._scratchFor(2, w, h);
         tctx.drawImage(warped, 0, 0);
@@ -1080,26 +1112,25 @@ export class Compositor {
   }
 
   /**
-   * A true 4-corner perspective fit: `source`'s own rectangle warped so its
-   * four corners land on `points` (each an [x,y] pair in 0…1 fractions of
+   * A true perspective fit over an arbitrary `rows`×`cols` grid: `source`'s
+   * own rectangle divided into (rows-1)×(cols-1) cells, each warped so its
+   * 4 corners land on the corresponding 4 neighbouring points in `points`
+   * (row-major, length rows*cols, each an [x,y] pair in 0…1 fractions of
    * w×h — denormalized here). Canvas 2D has no native projective-transform
-   * primitive, only affine (scale/rotate/skew/translate), so this
-   * subdivides the source into a grid of small quads, splits each into two
-   * triangles, and draws every triangle through its own affine transform —
-   * a triangle always maps correctly under an affine transform, and enough
-   * small ones make the curve of the true projection invisible at any
-   * single cell. `grid` trades quality for speed; 24 is fine-grained enough
-   * that raising it further doesn't visibly change a texture tile, even
-   * dragging a handle live.
+   * primitive, only affine (scale/rotate/skew/translate), so each cell is
+   * itself subdivided into small quads, split into two triangles apiece,
+   * and drawn through its own affine transform — a triangle always maps
+   * correctly under an affine transform, and enough small ones make the
+   * curve of the true projection invisible at any single one. `grid` is
+   * the total triangle-grid budget shared across every cell, not a
+   * per-cell count, so a finer control grid doesn't quietly cost more to
+   * render than a coarse one. rows=cols=2 — one cell, corners only — is
+   * exactly the original 4-corner warp.
    */
-  _warpPerspective(source, w, h, points, grid = 24) {
-    const dst = points.map(([x, y]) => [x * w, y * h]);
-    const srcCorners = [[0, 0], [w, 0], [w, h], [0, h]];
-    const H = computeHomography(srcCorners, dst);
-
+  _warpPerspective(source, w, h, points, rows, cols, grid = 24) {
     const out = makeCanvas(w, h);
     const octx = out.getContext("2d");
-    const drawTri = (s0, s1, s2) => {
+    const drawTri = (H, s0, s1, s2) => {
       const d0 = applyHomography(H, ...s0);
       const d1 = applyHomography(H, ...s1);
       const d2 = applyHomography(H, ...s2);
@@ -1115,14 +1146,36 @@ export class Compositor {
       octx.restore();
     };
 
-    for (let j = 0; j < grid; j += 1) {
-      const sy0 = (j / grid) * h;
-      const sy1 = ((j + 1) / grid) * h;
-      for (let i = 0; i < grid; i += 1) {
-        const sx0 = (i / grid) * w;
-        const sx1 = ((i + 1) / grid) * w;
-        drawTri([sx0, sy0], [sx1, sy0], [sx1, sy1]);
-        drawTri([sx0, sy0], [sx1, sy1], [sx0, sy1]);
+    const cellRows = Math.max(1, rows - 1);
+    const cellCols = Math.max(1, cols - 1);
+    const subGrid = Math.max(2, Math.round(grid / Math.max(cellRows, cellCols)));
+
+    for (let cr = 0; cr < cellRows; cr += 1) {
+      for (let cc = 0; cc < cellCols; cc += 1) {
+        // The 4 grid points bounding this one cell — p00 top-left, going
+        // clockwise to p10 (top-right), p11 (bottom-right), p01 (bottom-left).
+        const p00 = points[cr * cols + cc];
+        const p10 = points[cr * cols + cc + 1];
+        const p01 = points[(cr + 1) * cols + cc];
+        const p11 = points[(cr + 1) * cols + cc + 1];
+        const dst = [
+          [p00[0] * w, p00[1] * h], [p10[0] * w, p10[1] * h],
+          [p11[0] * w, p11[1] * h], [p01[0] * w, p01[1] * h],
+        ];
+        const sx0 = (cc / cellCols) * w, sx1 = ((cc + 1) / cellCols) * w;
+        const sy0 = (cr / cellRows) * h, sy1 = ((cr + 1) / cellRows) * h;
+        const H = computeHomography([[sx0, sy0], [sx1, sy0], [sx1, sy1], [sx0, sy1]], dst);
+
+        for (let gy = 0; gy < subGrid; gy += 1) {
+          const y0 = sy0 + (gy / subGrid) * (sy1 - sy0);
+          const y1 = sy0 + ((gy + 1) / subGrid) * (sy1 - sy0);
+          for (let gx = 0; gx < subGrid; gx += 1) {
+            const x0 = sx0 + (gx / subGrid) * (sx1 - sx0);
+            const x1 = sx0 + ((gx + 1) / subGrid) * (sx1 - sx0);
+            drawTri(H, [x0, y0], [x1, y0], [x1, y1]);
+            drawTri(H, [x0, y0], [x1, y1], [x0, y1]);
+          }
+        }
       }
     }
     return out;

@@ -39,6 +39,8 @@ export function createControls({ compositor, onEdit = () => {}, onHistoryChange 
     texReadout: $("texReadout"),
     texStrength: $("texStrength"),
     texStrengthReadout: $("texStrengthReadout"),
+    texScale: $("texScale"),
+    texScaleReadout: $("texScaleReadout"),
     texRotation: $("texRotation"),
     texRotationReadout: $("texRotationReadout"),
     texDepth: $("texDepth"),
@@ -215,17 +217,22 @@ export function createControls({ compositor, onEdit = () => {}, onHistoryChange 
     el.texStrength.value = String(Math.round(edits.textureStrength * 100));
     el.texStrengthReadout.value = String(Math.round(edits.textureStrength * 100));
 
+    el.texScale.value = String(Math.round(edits.textureScale * 100));
+    el.texScaleReadout.value = String(Math.round(edits.textureScale * 100));
+
     el.texRotation.value = String(edits.textureRotation);
     el.texRotationReadout.value = String(edits.textureRotation);
     el.texDepth.value = String(edits.textureDepth);
     el.texDepthReadout.value = String(edits.textureDepth);
-    // Rotating or depth-warping a texture that isn't applied has nothing to
-    // show — disabled rather than hidden, so the controls don't jump around
-    // as textures are picked and cleared.
+    // Rotating, rescaling, or depth-warping a texture that isn't applied has
+    // nothing to show — disabled rather than hidden, so the controls don't
+    // jump around as textures are picked and cleared.
     el.texRotation.disabled = edits.texture === "none";
     el.texDepth.disabled = edits.texture === "none";
+    el.texScale.disabled = edits.texture === "none";
     el.texRotationReadout.disabled = edits.texture === "none";
     el.texDepthReadout.disabled = edits.texture === "none";
+    el.texScaleReadout.disabled = edits.texture === "none";
 
     el.feather.value = String(edits.feather);
     el.featherReadout.value = String(edits.feather);
@@ -418,6 +425,10 @@ export function createControls({ compositor, onEdit = () => {}, onHistoryChange 
     commit({ textureStrength: Number(el.texStrength.value) / 100 }));
   el.texStrength.addEventListener("change", pushHistory);
   linkNumberField(el.texStrengthReadout, el.texStrength, (n) => ({ textureStrength: n / 100 }));
+  el.texScale.addEventListener("input", () =>
+    commit({ textureScale: Number(el.texScale.value) / 100 }));
+  el.texScale.addEventListener("change", pushHistory);
+  linkNumberField(el.texScaleReadout, el.texScale, (n) => ({ textureScale: n / 100 }));
   el.texRotation.addEventListener("input", () =>
     commit({ textureRotation: Number(el.texRotation.value) }));
   el.texRotation.addEventListener("change", pushHistory);
